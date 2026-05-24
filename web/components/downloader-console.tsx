@@ -17,8 +17,11 @@ type TaskRecord = {
   platform: string | null;
   title: string | null;
   thumbnail_url: string | null;
+  thumbnail_filename: string | null;
   duration_seconds: number | null;
   status: TaskStatus;
+  progress: number;
+  status_message: string;
   subtitle_source: "embedded" | "automatic" | "asr" | "none";
   subtitle_ready: boolean;
   video_ready: boolean;
@@ -45,7 +48,9 @@ const statusLabels: Record<TaskStatus, string> = {
 };
 
 export function DownloaderConsole() {
+  const enableCookieInput = process.env.NEXT_PUBLIC_ENABLE_COOKIE_INPUT === "true";
   const [url, setUrl] = useState("");
+  const [cookies, setCookies] = useState("");
   const [task, setTask] = useState<TaskRecord | null>(null);
   const [subtitle, setSubtitle] = useState<SubtitleResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +104,13 @@ export function DownloaderConsole() {
     return statusLabels[task.status];
   }, [task]);
 
+  const thumbnailSrc = useMemo(() => {
+    if (!task?.thumbnail_filename) {
+      return null;
+    }
+    return `/api/tasks/${task.task_id}/thumbnail`;
+  }, [task?.task_id, task?.thumbnail_filename]);
+
   async function submitTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
@@ -111,7 +123,7 @@ export function DownloaderConsole() {
       const response = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, cookies }),
       });
 
       if (!response.ok) {
@@ -148,7 +160,7 @@ export function DownloaderConsole() {
         <p className="eyebrow">LOCAL-FIRST VIDEO TOOLCHAIN</p>
         <h1>Flux Caption Foundry</h1>
         <p className="lede">
-          面向抖音和 B 站的本地下载工作台。一个链接，完成解析、字幕提取、自动转写和文件导出。
+          面向 B 站稳定支持、抖音实验支持的视频处理工作台。一个链接，完成解析、字幕提取、自动转写和文件导出。
         </p>
       </section>
 
@@ -159,9 +171,23 @@ export function DownloaderConsole() {
             id="video-url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="粘贴抖音、B站或其他 yt-dlp 兼容链接"
+            placeholder="可直接粘贴纯链接，或抖音/B站整段分享文案，系统会自动提取其中的链接"
             required
           />
+          {enableCookieInput ? (
+            <>
+              <label htmlFor="video-cookies">临时 Cookies（可选）</label>
+              <textarea
+                id="video-cookies"
+                value={cookies}
+                onChange={(event) => setCookies(event.target.value)}
+                placeholder="可直接粘贴浏览器里复制出来的整段 cookie 字符串，不要求是 cookies.txt"
+              />
+              <p className="field-hint">
+                B 站通常不需要。抖音如果解析失败，可以在这里粘贴新鲜 cookies 重试。这里只会保留可识别的 key=value 项传给后端解析器。
+              </p>
+            </>
+          ) : null}
           <button className="primary-button" type="submit" disabled={submitting}>
             {submitting ? "提交中..." : "开始处理"}
           </button>
@@ -171,6 +197,14 @@ export function DownloaderConsole() {
           <article className="status-card">
             <span className="card-label">任务状态</span>
             <strong>{statusText}</strong>
+            {task ? (
+              <>
+                <div className="progress-track" aria-label="任务进度">
+                  <div className="progress-fill" style={{ width: `${task.progress}%` }} />
+                </div>
+                <p className="progress-copy">{task.progress.toFixed(1)}% · {task.status_message}</p>
+              </>
+            ) : null}
             <p>
               {task
                 ? `平台：${task.platform ?? "识别中"} / 字幕：${task.subtitle_ready ? "可用" : "处理中"} / 视频：${
@@ -183,8 +217,9 @@ export function DownloaderConsole() {
           <article className="status-card">
             <span className="card-label">当前限制</span>
             <ul>
+              <li>B 站为稳定支持平台</li>
+              <li>抖音为实验支持平台，成功率不保证</li>
               <li>仅支持公开可访问内容</li>
-              <li>不支持 cookies、会员或私密视频</li>
               <li>超长视频会被任务策略拒绝</li>
             </ul>
           </article>
@@ -209,7 +244,7 @@ export function DownloaderConsole() {
             <p className="meta">
               {task.platform ?? "未知平台"} · {task.duration_seconds ? `${task.duration_seconds}s` : "时长识别中"}
             </p>
-            {task.thumbnail_url ? <img alt={task.title ?? "thumbnail"} src={task.thumbnail_url} /> : <div className="thumbnail-skeleton" />}
+            {thumbnailSrc ? <img alt={task.title ?? "thumbnail"} src={thumbnailSrc} /> : <div className="thumbnail-skeleton" />}
             {task.error_message ? <p className="inline-error">{task.error_message}</p> : null}
             <div className="action-row">
               <a
@@ -237,7 +272,12 @@ export function DownloaderConsole() {
             <h2>字幕预览</h2>
             <pre>{subtitle?.content ?? "字幕生成后会显示在这里。"}</pre>
             <div className="action-row">
-              <button className="secondary-button" type="button" onClick={copySubtitle} disabled={!subtitle?.content}>
+              <button
+                className="secondary-button subtitle-copy-button"
+                type="button"
+                onClick={copySubtitle}
+                disabled={!subtitle?.content}
+              >
                 {copied ? "已复制" : "复制字幕"}
               </button>
               <a

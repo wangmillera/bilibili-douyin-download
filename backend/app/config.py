@@ -6,8 +6,17 @@ import os
 @dataclass(frozen=True)
 class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
+    queue_mode: str = os.getenv("QUEUE_MODE", "redis")
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     tasks_dir: Path = Path(os.getenv("TASKS_DIR", "../tmp/tasks")).resolve()
+    douyin_cookie_file: Path = Path(os.getenv("DOUYIN_COOKIE_FILE", "../tmp/douyin.cookies.txt")).resolve()
+    douyin_downloader_dir: Path = Path(
+        os.getenv("DOUYIN_DOWNLOADER_DIR", "/private/tmp/douyin-downloader")
+    ).resolve()
+    douyin_downloader_python: str = os.getenv(
+        "DOUYIN_DOWNLOADER_PYTHON",
+        "/private/tmp/douyin-downloader/.venv/bin/python",
+    )
     task_ttl_seconds: int = int(os.getenv("TASK_TTL_SECONDS", "86400"))
     ytdlp_bin: str = os.getenv("YTDLP_BIN", "yt-dlp")
     ffmpeg_bin: str = os.getenv("FFMPEG_BIN", "ffmpeg")
@@ -24,3 +33,4 @@ class Settings:
 
 settings = Settings()
 settings.tasks_dir.mkdir(parents=True, exist_ok=True)
+settings.douyin_cookie_file.parent.mkdir(parents=True, exist_ok=True)

@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import threading
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
@@ -11,6 +12,7 @@ from .jobs import process_task
 from .models import CreateTaskRequest, CreateTaskResponse, SubtitleResponse, TaskRecord
 from .queue import get_queue
 from .task_store import create_task, get_task_dir, load_task, purge_expired_tasks, read_text_file, update_task
+from .url_extract import extract_first_url
 
 
 app = FastAPI(title="Video Downloader API", version="0.1.0")
@@ -40,10 +42,23 @@ def healthcheck() -> dict[str, str]:
 @app.post("/api/tasks", response_model=CreateTaskResponse)
 def submit_task(payload: CreateTaskRequest) -> CreateTaskResponse:
     purge_expired_tasks()
+    try:
+        source_url = extract_first_url(str(payload.url))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     task_id = uuid4().hex
-    create_task(task_id, str(payload.url))
-    queue = get_queue()
-    queue.enqueue(process_task, task_id, str(payload.url), job_id=task_id)
+    create_task(task_id, source_url, cookies_supplied=bool(payload.cookies and payload.cookies.strip()))
+    if settings.queue_mode == "inline":
+        thread = threading.Thread(
+            target=process_task,
+            args=(task_id, source_url, payload.cookies),
+            daemon=True,
+        )
+        thread.start()
+    else:
+        queue = get_queue()
+        queue.enqueue(process_task, task_id, source_url, payload.cookies, job_id=task_id)
     return CreateTaskResponse(task_id=task_id)
 
 
@@ -72,6 +87,20 @@ def download_video(task_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Video not ready")
     path = get_task_dir(task_id) / task.video_filename
     return guarded_file_response(path, task.video_filename, "video/mp4")
+
+
+@app.get("/api/tasks/{task_id}/thumbnail")
+def download_thumbnail(task_id: str) -> FileResponse:
+    task = get_existing_task(task_id)
+    if not task.thumbnail_filename:
+        raise HTTPException(status_code=404, detail="Thumbnail not ready")
+    path = get_task_dir(task_id) / task.thumbnail_filename
+    media_type = "image/jpeg"
+    if path.suffix.lower() == ".png":
+        media_type = "image/png"
+    elif path.suffix.lower() == ".webp":
+        media_type = "image/webp"
+    return guarded_file_response(path, task.thumbnail_filename, media_type)
 
 
 @app.get("/api/tasks/{task_id}/files/subtitle.srt")

@@ -1,23 +1,58 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
+import mimetypes
+import subprocess
 
+import requests
 from yt_dlp import YoutubeDL
 
 from .config import settings
-from .subtitles import LANGUAGE_PREFERENCES, convert_subtitle_to_srt, find_first_match, write_txt_from_srt
+from .subtitles import (
+    LANGUAGE_PREFERENCES,
+    convert_subtitle_to_srt,
+    find_first_match,
+    normalize_srt_to_simplified,
+    write_txt_from_srt,
+)
+
+COOKIE_DOMAINS = [
+    ".douyin.com",
+    "www.douyin.com",
+    "v.douyin.com",
+    "live.douyin.com",
+    ".iesdouyin.com",
+]
 
 
-def probe_video(url: str) -> dict:
-    with YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True}) as ydl:
+def probe_video(url: str, cookies: str | None = None, task_dir: Path | None = None) -> dict:
+    with YoutubeDL(base_opts(url, cookies, task_dir)) as ydl:
         return ydl.extract_info(url, download=False)
 
 
-def subtitle_opts(task_dir: Path) -> dict:
-    return {
+def base_opts(url: str, cookies: str | None = None, task_dir: Path | None = None) -> dict:
+    opts = {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+    }
+    cookie_header = resolve_cookie_header(url, cookies)
+    if cookie_header:
+        opts["http_headers"] = {
+            "Cookie": cookie_header,
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://www.douyin.com/",
+        }
+        if task_dir:
+            cookie_file = write_cookie_file(task_dir, cookie_header)
+            opts["cookiefile"] = str(cookie_file)
+    return opts
+
+
+def subtitle_opts(task_dir: Path, cookies: str | None = None) -> dict:
+    return {
+        **base_opts("", cookies, task_dir),
         "skip_download": True,
         "writesubtitles": True,
         "writeautomaticsub": True,
@@ -27,12 +62,15 @@ def subtitle_opts(task_dir: Path) -> dict:
     }
 
 
-def try_download_subtitles(url: str, task_dir: Path) -> tuple[bool, str]:
-    with YoutubeDL(subtitle_opts(task_dir)) as ydl:
+def try_download_subtitles(url: str, task_dir: Path, cookies: str | None = None) -> tuple[bool, str]:
+    opts = subtitle_opts(task_dir, cookies)
+    opts.update(base_opts(url, cookies, task_dir))
+    with YoutubeDL(opts) as ydl:
         ydl.download([url])
 
     srt_path = normalize_srt_path(task_dir)
     if srt_path:
+        normalize_srt_to_simplified(srt_path)
         write_txt_from_srt(srt_path, task_dir / "subtitle.txt")
         return True, "embedded"
 
@@ -40,29 +78,103 @@ def try_download_subtitles(url: str, task_dir: Path) -> tuple[bool, str]:
     if source:
         normalized = task_dir / "subtitle.srt"
         convert_subtitle_to_srt(source, normalized)
+        normalize_srt_to_simplified(normalized)
         write_txt_from_srt(normalized, task_dir / "subtitle.txt")
         return True, "automatic"
     return False, "none"
 
 
-def download_video(url: str, task_dir: Path) -> Path:
-    outtmpl = str(task_dir / "video.%(ext)s")
+def download_video(url: str, task_dir: Path, progress_callback=None, cookies: str | None = None) -> Path:
+    outtmpl = str(task_dir / "source-video.%(ext)s")
+
+    def hook(event: dict) -> None:
+        if not progress_callback:
+            return
+        if event.get("status") != "downloading":
+            if event.get("status") == "finished":
+                progress_callback(90, "视频下载完成，准备转码兼容格式")
+            return
+        total = event.get("total_bytes") or event.get("total_bytes_estimate") or 0
+        downloaded = event.get("downloaded_bytes") or 0
+        if total:
+            fraction = max(0.0, min(1.0, downloaded / total))
+            progress_callback(50 + fraction * 35, f"视频下载中 {fraction * 100:.1f}%")
+        else:
+            progress_callback(60, "视频下载中")
+
     opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "format": "bv*+ba/b",
+        **base_opts(url, cookies, task_dir),
+        "format": "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/bestvideo[vcodec^=h264]+bestaudio/best[ext=mp4]/best",
         "merge_output_format": "mp4",
         "outtmpl": outtmpl,
+        "progress_hooks": [hook],
     }
     with YoutubeDL(opts) as ydl:
         ydl.download([url])
 
     for extension in (".mp4", ".mkv", ".webm", ".mov"):
-        path = task_dir / f"video{extension}"
+        path = task_dir / f"source-video{extension}"
         if path.exists():
-            return path
+            normalized = task_dir / "video.mp4"
+            transcode_video_for_playback(path, normalized, progress_callback=progress_callback)
+            return normalized
     raise FileNotFoundError("Video file was not created")
+
+
+def transcode_video_for_playback(source_path: Path, target_path: Path, progress_callback=None) -> None:
+    if progress_callback:
+        progress_callback(92, "正在转码为兼容播放格式")
+
+    subprocess.run(
+        [
+            settings.ffmpeg_bin,
+            "-y",
+            "-i",
+            str(source_path),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            "veryfast",
+            "-movflags",
+            "+faststart",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            str(target_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    if progress_callback:
+        progress_callback(98, "兼容播放格式已生成")
+
+
+def download_thumbnail(thumbnail_url: str, task_dir: Path) -> Path | None:
+    response = requests.get(
+        thumbnail_url,
+        timeout=20,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": thumbnail_url,
+        },
+    )
+    response.raise_for_status()
+
+    path = urlparse(thumbnail_url).path
+    suffix = Path(path).suffix.lower()
+    if not suffix:
+        suffix = mimetypes.guess_extension(response.headers.get("content-type", "").split(";")[0].strip()) or ".jpg"
+    if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
+        suffix = ".jpg"
+
+    target = task_dir / f"thumbnail{suffix}"
+    target.write_bytes(response.content)
+    return target
 
 
 def normalize_srt_path(task_dir: Path) -> Path | None:
@@ -79,3 +191,66 @@ def normalize_srt_path(task_dir: Path) -> Path | None:
     if chosen != normalized:
         chosen.replace(normalized)
     return normalized
+
+
+def sanitize_cookie_header(raw_cookie: str | None) -> str | None:
+    if not raw_cookie:
+        return None
+
+    cleaned = raw_cookie.strip().strip("'").strip('"')
+    if not cleaned:
+        return None
+
+    pairs: list[str] = []
+    for part in cleaned.split(";"):
+        segment = part.strip()
+        if not segment or "=" not in segment:
+            continue
+        key, value = segment.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            continue
+        pairs.append(f"{key}={value}")
+
+    return "; ".join(pairs) if pairs else None
+
+
+def resolve_cookie_header(url: str, raw_cookie: str | None) -> str | None:
+    cookie_header = sanitize_cookie_header(raw_cookie)
+    if cookie_header:
+        return cookie_header
+
+    if not is_douyin_url(url):
+        return None
+
+    if not settings.douyin_cookie_file.exists():
+        return None
+
+    return sanitize_cookie_header(settings.douyin_cookie_file.read_text(encoding="utf-8"))
+
+
+def is_douyin_url(url: str) -> bool:
+    hostname = urlparse(url).hostname or ""
+    return any(
+        hostname == domain or hostname.endswith(f".{domain}")
+        for domain in ("douyin.com", "iesdouyin.com")
+    )
+
+
+def write_cookie_file(task_dir: Path, cookie_header: str) -> Path:
+    cookie_file = task_dir / "cookies.txt"
+    lines = ["# Netscape HTTP Cookie File"]
+    for pair in cookie_header.split(";"):
+        segment = pair.strip()
+        if "=" not in segment:
+            continue
+        key, value = segment.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            continue
+        for domain in COOKIE_DOMAINS:
+            lines.append("\t".join([domain, "TRUE", "/", "FALSE", "0", key, value]))
+    cookie_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return cookie_file

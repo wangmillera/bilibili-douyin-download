@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .config import settings
-from .subtitles import write_txt_from_srt
+from .subtitles import to_simplified_chinese, write_txt_from_srt
 
 
 @lru_cache(maxsize=1)
@@ -26,7 +26,7 @@ def format_srt_timestamp(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
 
-def transcribe_media(media_path: Path, srt_path: Path, txt_path: Path) -> None:
+def transcribe_media(media_path: Path, srt_path: Path, txt_path: Path, duration_seconds: int | None = None, progress_callback=None) -> None:
     model = get_model()
     segments, _ = model.transcribe(
         str(media_path),
@@ -36,9 +36,12 @@ def transcribe_media(media_path: Path, srt_path: Path, txt_path: Path) -> None:
 
     srt_lines: list[str] = []
     for index, segment in enumerate(segments, start=1):
-        text = segment.text.strip()
+        text = to_simplified_chinese(segment.text.strip())
         if not text:
             continue
+        if progress_callback and duration_seconds and duration_seconds > 0:
+            fraction = max(0.0, min(1.0, segment.end / duration_seconds))
+            progress_callback(55 + fraction * 40, f"字幕转写中 {fraction * 100:.1f}%")
         srt_lines.extend(
             [
                 str(index),
