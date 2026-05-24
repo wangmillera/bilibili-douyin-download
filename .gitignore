@@ -1,0 +1,13 @@
+.next
+node_modules
+__pycache__
+.pytest_cache
+.venv
+dist
+build
+tmp/tasks/*
+!tmp/tasks/.gitkeep
+backend/.venv
+*.pyc
+*.pyo
+*.DS_Store

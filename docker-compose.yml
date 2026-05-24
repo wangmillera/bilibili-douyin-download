@@ -1,0 +1,59 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TASKS_DIR: /app/tmp/tasks
+      TASK_TTL_SECONDS: 86400
+      YTDLP_BIN: yt-dlp
+      FFMPEG_BIN: ffmpeg
+      WHISPER_MODEL: small
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      MAX_VIDEO_DURATION_SECONDS: 3600
+    volumes:
+      - ./tmp/tasks:/app/tmp/tasks
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: ./backend
+    command: python worker.py
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TASKS_DIR: /app/tmp/tasks
+      TASK_TTL_SECONDS: 86400
+      YTDLP_BIN: yt-dlp
+      FFMPEG_BIN: ffmpeg
+      WHISPER_MODEL: small
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      MAX_VIDEO_DURATION_SECONDS: 3600
+    volumes:
+      - ./tmp/tasks:/app/tmp/tasks
+    depends_on:
+      - redis
+
+  web:
+    build:
+      context: ./web
+      args:
+        BACKEND_ORIGIN: http://api:8000
+    environment:
+      BACKEND_ORIGIN: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
