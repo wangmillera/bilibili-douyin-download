@@ -8,7 +8,10 @@ import shutil
 import subprocess
 
 import requests
-import youtube_dl as legacy_youtube_dl
+try:
+    import youtube_dl as legacy_youtube_dl
+except ImportError:
+    legacy_youtube_dl = None
 from yt_dlp import YoutubeDL
 from yt_dlp.cookies import extract_cookies_from_browser
 
@@ -226,6 +229,8 @@ def download_youtube_video_with_legacy_downloader(
     progress_callback=None,
     cookies: str | None = None,
 ) -> Path:
+    if legacy_youtube_dl is None:
+        raise RuntimeError("youtube_dl is not installed; set YOUTUBE_DOWNLOADER=yt-dlp or install youtube_dl")
     outtmpl = str(task_dir / "source-video.%(ext)s")
 
     def hook(event: dict) -> None:

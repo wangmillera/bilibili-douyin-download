@@ -15,6 +15,7 @@ from .queue import get_queue
 from .task_store import (
     create_task,
     delete_task,
+    find_completed_task_by_url,
     get_task_dir,
     list_recent_tasks,
     load_task,
@@ -86,6 +87,18 @@ def get_task(task_id: str) -> TaskRecord:
 def get_recent_tasks(limit: int = 8) -> list[TaskRecord]:
     purge_expired_tasks()
     return list_recent_tasks(limit=limit)
+
+
+@app.get("/api/tasks/check-duplicate")
+def check_duplicate(url: str) -> dict[str, object]:
+    try:
+        source_url = extract_first_url(url)
+    except ValueError:
+        return {"duplicate": False, "task": None}
+    existing = find_completed_task_by_url(source_url)
+    if existing is None:
+        return {"duplicate": False, "task": None}
+    return {"duplicate": True, "task": existing.model_dump(mode="json")}
 
 
 @app.delete("/api/tasks/{task_id}")

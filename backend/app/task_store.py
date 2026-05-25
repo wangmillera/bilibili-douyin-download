@@ -107,6 +107,17 @@ def list_recent_tasks(limit: int = 8) -> list[TaskRecord]:
     return records[: max(1, limit)]
 
 
+def find_completed_task_by_url(url: str) -> TaskRecord | None:
+    """Return any completed task whose source_url matches `url`, or None."""
+    for task_dir in settings.tasks_dir.iterdir():
+        if not task_dir.is_dir():
+            continue
+        record = load_task(task_dir.name)
+        if record and record.status == "completed" and record.source_url == url:
+            return record
+    return None
+
+
 def load_json(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}

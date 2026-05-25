@@ -635,6 +635,13 @@ select {
   font-family: "SFMono-Regular", "JetBrains Mono", "Consolas", monospace;
 }
 
+.subtitle-placeholder {
+  border-top: 1px solid var(--line);
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
 .player-shell {
   margin-top: 18px;
 }
@@ -706,6 +713,20 @@ select {
   background: rgba(15, 118, 110, 0.06);
 }
 
+.history-thumbnail {
+  width: 64px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+}
+
+.history-thumbnail-empty {
+  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+}
+
 .history-meta {
   display: flex;
   align-items: flex-start;
@@ -714,10 +735,10 @@ select {
   min-width: 0;
 }
 
-.history-meta > div:first-child {
+.history-title-col {
   min-width: 0;
   overflow: hidden;
-  max-width: 70%;
+  flex: 1;
 }
 
 .history-item h3 {

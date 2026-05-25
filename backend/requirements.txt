@@ -7,7 +7,7 @@ faster-whisper==1.1.1
 pydantic==2.11.5
 requests==2.32.3
 opencc-python-reimplemented==0.1.7
-youtube_dl==2021.12.17
+
 browser-cookie3==0.20.1
 # douyin-downloader dependencies (needed for desktop packaging)
 aiohttp>=3.9.0

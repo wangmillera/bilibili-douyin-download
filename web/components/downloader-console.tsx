@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   chooseDownloadDirectory,
@@ -219,12 +219,18 @@ export function DownloaderConsole() {
     return () => window.clearInterval(timer);
   }, [isTerminalState, runtime.backendOrigin, task]);
 
+  const subtitleAbortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (!task?.subtitle_ready) {
       return;
     }
 
-    fetch(apiUrl(`/api/tasks/${task.task_id}/subtitle`), { cache: "no-store" })
+    subtitleAbortRef.current?.abort();
+    const controller = new AbortController();
+    subtitleAbortRef.current = controller;
+
+    fetch(apiUrl(`/api/tasks/${task.task_id}/subtitle`), { cache: "no-store", signal: controller.signal })
       .then((response) => {
         if (!response.ok) {
           throw new Error("字幕读取失败");
@@ -233,7 +239,9 @@ export function DownloaderConsole() {
       })
       .then((payload: SubtitleResponse) => setSubtitle(payload))
       .catch((reason: Error) => {
-        setError(reason.message);
+        if (reason.name !== "AbortError") {
+          setError(reason.message);
+        }
       });
   }, [runtime.backendOrigin, task?.subtitle_ready, task?.task_id]);
 
@@ -294,6 +302,21 @@ export function DownloaderConsole() {
     setPlayerOpen(false);
 
     try {
+      const dupResponse = await fetch(apiUrl(`/api/tasks/check-duplicate?url=${encodeURIComponent(url)}`));
+      if (dupResponse.ok) {
+        const dupResult = await dupResponse.json();
+        if (dupResult.duplicate && dupResult.task) {
+          const dupTask = dupResult.task as TaskRecord;
+          const confirmed = window.confirm(
+            `该链接已成功下载过：\n\n「${dupTask.title ?? "未命名任务"}」\n\n下载时间：${formatCreatedAt(dupTask.created_at)}\n\n是否仍然重新下载？`
+          );
+          if (!confirmed) {
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+
       const response = await fetch(apiUrl("/api/tasks"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -850,9 +873,13 @@ export function DownloaderConsole() {
                   </div>
                 ) : null}
 
-                <details className="subtitle-preview" open={Boolean(subtitle?.content)}>
+                <details key={task?.task_id} className="subtitle-preview" open>
                   <summary>字幕预览</summary>
-                  <pre>{subtitle?.content ?? "当前任务完成后会在这里展示字幕预览。"}</pre>
+                  {subtitle?.content ? (
+                    <pre>{subtitle.content}</pre>
+                  ) : (
+                    <div className="subtitle-placeholder">暂无字幕</div>
+                  )}
                 </details>
               </div>
             </div>
@@ -887,7 +914,16 @@ export function DownloaderConsole() {
                     }}
                   >
                     <div className="history-meta">
-                      <div>
+                      {item.thumbnail_filename ? (
+                        <img
+                          className="history-thumbnail"
+                          alt=""
+                          src={apiUrl(`/api/tasks/${item.task_id}/thumbnail`)}
+                        />
+                      ) : (
+                        <div className="history-thumbnail history-thumbnail-empty" />
+                      )}
+                      <div className="history-title-col">
                         <h3>{item.title ?? "未命名任务"}</h3>
                         <p>{formatCreatedAt(item.created_at)}</p>
                       </div>
