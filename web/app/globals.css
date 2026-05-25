@@ -70,6 +70,30 @@ select {
   backdrop-filter: blur(10px);
 }
 
+.confirm-dialog {
+  width: min(420px, calc(100vw - 40px));
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  padding: 28px 24px 20px;
+}
+
+.confirm-message {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
 .settings-modal {
   width: min(760px, calc(100vw - 40px));
   border: 1px solid var(--line);
@@ -691,76 +715,110 @@ select {
 }
 
 .history-item {
-  display: grid;
-  gap: 10px;
-  padding: 12px 14px;
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: #f8fafc;
+  border-radius: 16px;
+  background: var(--panel-strong);
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
   min-width: 0;
   overflow: hidden;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .history-item:hover {
-  transform: translateY(-1px);
-  border-color: rgba(15, 118, 110, 0.24);
+  border-color: rgba(15, 118, 110, 0.2);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .history-item-selected {
-  border-color: rgba(15, 118, 110, 0.32);
-  background: rgba(15, 118, 110, 0.06);
+  border-color: rgba(15, 118, 110, 0.28);
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.04), rgba(15, 118, 110, 0.01));
+  box-shadow: 0 2px 10px rgba(15, 118, 110, 0.08);
 }
 
 .history-thumbnail {
-  width: 64px;
-  height: 36px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
+  width: 128px;
+  height: 72px;
+  border-radius: 10px;
   object-fit: cover;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+  background: linear-gradient(135deg, #eef2f7, #e2e8f0);
 }
 
 .history-thumbnail-empty {
-  background: linear-gradient(180deg, #f8fafc, #eef2f7);
+  width: 128px;
+  height: 72px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
 }
 
-.history-meta {
+.history-thumbnail-empty::after {
+  content: "";
+  display: block;
+  width: 28px;
+  height: 28px;
+  opacity: 0.3;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M10 9l5 3-5 3V9z'/%3E%3C/svg%3E") center/contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='M10 9l5 3-5 3V9z'/%3E%3C/svg%3E") center/contain no-repeat;
+  color: #94a3b8;
+}
+
+.history-body {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
 }
 
-.history-title-col {
-  min-width: 0;
-  overflow: hidden;
-  flex: 1;
-}
-
-.history-item h3 {
+.history-header h3 {
   margin: 0;
-  font-size: 0.96rem;
-  line-height: 1.35;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  flex: 1;
 }
 
-.history-item p {
-  margin: 4px 0 0;
+.history-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+}
+
+.history-info span + span::before {
+  content: "·";
+  margin-right: 6px;
+  opacity: 0.5;
 }
 
 .history-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
 }
 
 .history-empty {
@@ -793,9 +851,20 @@ select {
     padding: 18px;
   }
 
-  .panel-heading,
-  .history-meta {
+  .panel-heading {
     flex-direction: column;
+  }
+
+  .history-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .history-thumbnail,
+  .history-thumbnail-empty {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
   }
 
   .settings-grid,

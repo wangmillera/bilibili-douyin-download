@@ -56,12 +56,20 @@ def desktop_diagnostics() -> dict[str, object]:
 
 
 @app.post("/api/tasks", response_model=CreateTaskResponse)
-def submit_task(payload: CreateTaskRequest) -> CreateTaskResponse:
+def submit_task(payload: CreateTaskRequest, allow_duplicate: bool = False) -> CreateTaskResponse:
     purge_expired_tasks()
     try:
         source_url = extract_first_url(str(payload.url))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if not allow_duplicate:
+        existing = find_completed_task_by_url(source_url)
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=existing.model_dump(mode="json"),
+            )
 
     task_id = uuid4().hex
     create_task(task_id, source_url, cookies_supplied=bool(payload.cookies and payload.cookies.strip()))
@@ -78,17 +86,6 @@ def submit_task(payload: CreateTaskRequest) -> CreateTaskResponse:
     return CreateTaskResponse(task_id=task_id)
 
 
-@app.get("/api/tasks/{task_id}", response_model=TaskRecord)
-def get_task(task_id: str) -> TaskRecord:
-    return get_existing_task(task_id)
-
-
-@app.get("/api/tasks", response_model=list[TaskRecord])
-def get_recent_tasks(limit: int = 8) -> list[TaskRecord]:
-    purge_expired_tasks()
-    return list_recent_tasks(limit=limit)
-
-
 @app.get("/api/tasks/check-duplicate")
 def check_duplicate(url: str) -> dict[str, object]:
     try:
@@ -101,6 +98,17 @@ def check_duplicate(url: str) -> dict[str, object]:
     return {"duplicate": True, "task": existing.model_dump(mode="json")}
 
 
+@app.get("/api/tasks/{task_id}", response_model=TaskRecord)
+def get_task(task_id: str) -> TaskRecord:
+    return get_existing_task(task_id)
+
+
+@app.get("/api/tasks", response_model=list[TaskRecord])
+def get_recent_tasks(limit: int = 8) -> list[TaskRecord]:
+    purge_expired_tasks()
+    return list_recent_tasks(limit=limit)
+
+
 @app.delete("/api/tasks/{task_id}")
 def remove_task(task_id: str) -> dict[str, bool]:
     deleted = delete_task(task_id)
@@ -111,9 +119,14 @@ def remove_task(task_id: str) -> dict[str, bool]:
 
 @app.post("/api/tasks/{task_id}/cancel")
 def cancel_task_endpoint(task_id: str) -> dict[str, str]:
+    task = load_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status in ("completed", "failed", "expired"):
+        raise HTTPException(status_code=400, detail="Task is already in terminal state")
     cancelled = cancel_task(task_id)
     if not cancelled:
-        raise HTTPException(status_code=404, detail="Task not found or already completed")
+        update_task(task_id, status="failed", status_message="任务已被用户终止", error_code="CancelledError", error_message="任务已被用户终止")
     return {"status": "cancelled", "task_id": task_id}
 
 

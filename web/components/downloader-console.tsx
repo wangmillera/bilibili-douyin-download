@@ -105,6 +105,16 @@ export function DownloaderConsole() {
   const [douyinLoginActive, setDouyinLoginActive] = useState(false);
   const [douyinLoginLoading, setDouyinLoginLoading] = useState(false);
   const [douyinCookieCount, setDouyinCookieCount] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; resolve: (value: boolean) => void } | null>(null);
+
+  function showConfirm(message: string): Promise<boolean> {
+    return new Promise((resolve) => setConfirmDialog({ message, resolve }));
+  }
+
+  function dismissConfirm(value: boolean) {
+    confirmDialog?.resolve(value);
+    setConfirmDialog(null);
+  }
 
   const isTerminalState = task?.status === "completed" || task?.status === "failed" || task?.status === "expired";
   const runningInDesktop = runtime.isDesktop;
@@ -255,7 +265,7 @@ export function DownloaderConsole() {
   }, [isTerminalState]);
 
   useEffect(() => {
-    if (!settingsOpen && !playerOpen) {
+    if (!settingsOpen && !playerOpen && !confirmDialog) {
       return;
     }
 
@@ -263,12 +273,13 @@ export function DownloaderConsole() {
       if (event.key === "Escape") {
         setSettingsOpen(false);
         setPlayerOpen(false);
+        dismissConfirm(false);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [playerOpen, settingsOpen]);
+  }, [playerOpen, settingsOpen, confirmDialog]);
 
   const statusText = useMemo(() => {
     if (!task) {
@@ -302,26 +313,27 @@ export function DownloaderConsole() {
     setPlayerOpen(false);
 
     try {
-      const dupResponse = await fetch(apiUrl(`/api/tasks/check-duplicate?url=${encodeURIComponent(url)}`));
-      if (dupResponse.ok) {
-        const dupResult = await dupResponse.json();
-        if (dupResult.duplicate && dupResult.task) {
-          const dupTask = dupResult.task as TaskRecord;
-          const confirmed = window.confirm(
-            `该链接已成功下载过：\n\n「${dupTask.title ?? "未命名任务"}」\n\n下载时间：${formatCreatedAt(dupTask.created_at)}\n\n是否仍然重新下载？`
-          );
-          if (!confirmed) {
-            setSubmitting(false);
-            return;
-          }
-        }
-      }
-
-      const response = await fetch(apiUrl("/api/tasks"), {
+      let response = await fetch(apiUrl("/api/tasks"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
+
+      if (response.status === 409) {
+        const dupTask: TaskRecord = await response.json();
+        const confirmed = await showConfirm(
+          `该链接已成功下载过：\n\n「${dupTask.title ?? "未命名任务"}」\n\n下载时间：${formatCreatedAt(dupTask.created_at)}\n\n是否仍然重新下载？`
+        );
+        if (!confirmed) {
+          setSubmitting(false);
+          return;
+        }
+        response = await fetch(apiUrl("/api/tasks?allow_duplicate=true"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+      }
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({ detail: "提交失败" }));
@@ -436,7 +448,7 @@ export function DownloaderConsole() {
 
   async function deleteTask(taskId: string) {
     try {
-      const confirmed = window.confirm("确定删除这条任务记录及其本地文件吗？");
+      const confirmed = await showConfirm("确定删除这条任务记录及其本地文件吗？");
       if (!confirmed) {
         return;
       }
@@ -459,7 +471,7 @@ export function DownloaderConsole() {
 
   async function cancelTask(taskId: string) {
     try {
-      const confirmed = window.confirm("确定要终止这个任务吗？");
+      const confirmed = await showConfirm("确定要终止这个任务吗？");
       if (!confirmed) {
         return;
       }
@@ -696,6 +708,27 @@ export function DownloaderConsole() {
         </div>
       ) : null}
 
+      {confirmDialog ? (
+        <div className="settings-modal-shell" aria-hidden={false} onClick={() => dismissConfirm(false)}>
+          <div
+            className="confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="confirm-message">{confirmDialog.message}</p>
+            <div className="confirm-actions">
+              <button className="tool-button ghost" type="button" onClick={() => dismissConfirm(false)}>
+                取消
+              </button>
+              <button className="tool-button primary" type="button" onClick={() => dismissConfirm(true)}>
+                确认
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="workspace">
         <aside className="control-rail">
           <article className="tool-panel submission-panel">
@@ -913,104 +946,107 @@ export function DownloaderConsole() {
                       }
                     }}
                   >
-                    <div className="history-meta">
-                      {item.thumbnail_filename ? (
-                        <img
-                          className="history-thumbnail"
-                          alt=""
-                          src={apiUrl(`/api/tasks/${item.task_id}/thumbnail`)}
-                        />
-                      ) : (
-                        <div className="history-thumbnail history-thumbnail-empty" />
-                      )}
-                      <div className="history-title-col">
+                    {item.thumbnail_filename ? (
+                      <img
+                        className="history-thumbnail"
+                        alt=""
+                        src={apiUrl(`/api/tasks/${item.task_id}/thumbnail`)}
+                      />
+                    ) : (
+                      <div className="history-thumbnail history-thumbnail-empty" />
+                    )}
+                    <div className="history-body">
+                      <div className="history-header">
                         <h3>{item.title ?? "未命名任务"}</h3>
-                        <p>{formatCreatedAt(item.created_at)}</p>
+                        <span className={`status-pill status-${item.status}`}>{statusLabels[item.status]}</span>
                       </div>
-                      <span className={`status-pill status-${item.status}`}>{statusLabels[item.status]}</span>
-                    </div>
-                    <div className="history-actions">
-                      {runningInDesktop ? (
-                        <>
+                      <div className="history-info">
+                        <span>时长 {formatDuration(item.duration_seconds)}</span>
+                        <span>{formatCreatedAt(item.created_at)}</span>
+                      </div>
+                      <div className="history-actions">
+                        {runningInDesktop ? (
+                          <>
+                            <button
+                              className="mini-button"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTaskFile(item.task_id, "task-dir").catch(() => undefined);
+                              }}
+                            >
+                              打开目录
+                            </button>
+                            {item.subtitle_ready ? (
+                              <button
+                                className="mini-button"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openTaskFile(item.task_id, "subtitle-txt").catch(() => undefined);
+                                }}
+                              >
+                                打开字幕
+                              </button>
+                            ) : null}
+                            {item.video_ready ? (
+                              <button
+                                className="mini-button"
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openTaskFile(item.task_id, "video").catch(() => undefined);
+                                }}
+                              >
+                                打开视频
+                              </button>
+                            ) : null}
+                          </>
+                        ) : (
                           <button
                             className="mini-button"
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
-                              openTaskFile(item.task_id, "task-dir").catch(() => undefined);
+                              setTask(item);
                             }}
                           >
-                            打开目录
+                            查看任务
                           </button>
-                          {item.subtitle_ready ? (
-                            <button
-                              className="mini-button"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openTaskFile(item.task_id, "subtitle-txt").catch(() => undefined);
-                              }}
-                            >
-                              打开字幕
-                            </button>
-                          ) : null}
-                          {item.video_ready ? (
-                            <button
-                              className="mini-button"
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openTaskFile(item.task_id, "video").catch(() => undefined);
-                              }}
-                            >
-                              打开视频
-                            </button>
-                          ) : null}
-                        </>
-                      ) : (
+                        )}
                         <button
                           className="mini-button"
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            setTask(item);
+                            navigator.clipboard.writeText(item.source_url).catch(() => undefined);
                           }}
                         >
-                          查看任务
+                          复制链接
                         </button>
-                      )}
-                      <button
-                        className="mini-button"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          navigator.clipboard.writeText(item.source_url).catch(() => undefined);
-                        }}
-                      >
-                        复制链接
-                      </button>
-                      {item.status !== "completed" && item.status !== "failed" && item.status !== "expired" ? (
+                        {item.status !== "completed" && item.status !== "failed" && item.status !== "expired" ? (
+                          <button
+                            className="mini-button"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              cancelTask(item.task_id).catch(() => undefined);
+                            }}
+                          >
+                            终止
+                          </button>
+                        ) : null}
                         <button
-                          className="mini-button"
+                          className="mini-button mini-button-danger"
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            cancelTask(item.task_id).catch(() => undefined);
+                            deleteTask(item.task_id).catch(() => undefined);
                           }}
                         >
-                          终止
+                          删除
                         </button>
-                      ) : null}
-                      <button
-                        className="mini-button mini-button-danger"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteTask(item.task_id).catch(() => undefined);
-                        }}
-                      >
-                        删除
-                      </button>
+                      </div>
                     </div>
                   </article>
                 ))
