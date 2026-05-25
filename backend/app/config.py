@@ -10,6 +10,10 @@ class Settings:
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     tasks_dir: Path = Path(os.getenv("TASKS_DIR", "../tmp/tasks")).resolve()
     douyin_cookie_file: Path = Path(os.getenv("DOUYIN_COOKIE_FILE", "../tmp/douyin.cookies.txt")).resolve()
+    douyin_cookies_browser: str = os.getenv("DOUYIN_COOKIES_BROWSER", "chrome")
+    youtube_cookie_file: Path = Path(os.getenv("YOUTUBE_COOKIE_FILE", "../tmp/youtube.cookies.txt")).resolve()
+    youtube_cookies_browser: str = os.getenv("YOUTUBE_COOKIES_BROWSER", "chrome")
+    youtube_downloader: str = os.getenv("YOUTUBE_DOWNLOADER", "yt-dlp")
     douyin_downloader_dir: Path = Path(
         os.getenv("DOUYIN_DOWNLOADER_DIR", "/private/tmp/douyin-downloader")
     ).resolve()
@@ -34,3 +38,4 @@ class Settings:
 settings = Settings()
 settings.tasks_dir.mkdir(parents=True, exist_ok=True)
 settings.douyin_cookie_file.parent.mkdir(parents=True, exist_ok=True)
+settings.youtube_cookie_file.parent.mkdir(parents=True, exist_ok=True)

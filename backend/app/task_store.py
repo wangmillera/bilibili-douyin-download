@@ -87,6 +87,18 @@ def purge_expired_tasks() -> list[str]:
     return removed
 
 
+def list_recent_tasks(limit: int = 8) -> list[TaskRecord]:
+    records: list[TaskRecord] = []
+    for task_dir in settings.tasks_dir.iterdir():
+        if not task_dir.is_dir():
+            continue
+        record = load_task(task_dir.name)
+        if record is not None:
+            records.append(record)
+    records.sort(key=lambda record: record.created_at, reverse=True)
+    return records[: max(1, limit)]
+
+
 def load_json(path: Path) -> dict[str, object]:
     if not path.exists():
         return {}

@@ -115,14 +115,29 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
 
 
 def map_error_message(message: str, cookies_supplied: bool) -> str:
+    lowered = message.lower()
+    if "sign in to confirm you’re not a bot" in lowered or "sign in to confirm you're not a bot" in lowered:
+        if cookies_supplied:
+            return "YouTube 解析失败：当前 cookies 仍未通过机器人校验，请重新抓取浏览器中的最新 YouTube cookies。"
+        return "YouTube 解析失败：当前视频需要登录态 cookies 才能通过机器人校验。请先在本地抓取 YouTube 浏览器 cookies。"
+    if "requested format is not available" in lowered:
+        return "YouTube 解析失败：当前账号拿到的可用视频格式不可直接下载。请更换视频，或稍后重试。"
+    if "http error 403: forbidden" in lowered and (
+        "fragment" in lowered
+        or "m3u8" in lowered
+        or "hls" in lowered
+        or "giving up after" in lowered
+        or "got error:" in lowered
+    ):
+        return "YouTube 解析成功，但当前仅返回受限的 HLS 视频流，分片下载被 YouTube 拒绝（403）。请更换视频，或稍后重试。"
     if "Unsupported Douyin URL" in message:
         return "抖音解析失败：当前链接不是 douyin-downloader 支持的标准视频地址或短链。"
     if "Failed to get Douyin video detail" in message:
         if cookies_supplied:
             return "抖音解析失败：douyin-downloader 未能读取视频详情，当前 cookies 可能仍然失效。"
-        return "抖音解析失败：douyin-downloader 未能读取视频详情，可能仍然需要新鲜 cookies。"
-    if "Fresh cookies" in message or "cookies" in message.lower() and "douyin" in message.lower():
+        return "抖音解析失败：douyin-downloader 未能读取视频详情。请先在本机 Chrome 完成抖音登录授权后重试。"
+    if "Fresh cookies" in message or "cookies" in lowered and "douyin" in lowered:
         if cookies_supplied:
             return "抖音解析失败：当前 cookies 已失效或不够新鲜，请重新从浏览器复制最新 cookies 后再试。"
-        return "抖音解析失败：该视频需要新鲜 cookies。请在页面下方粘贴浏览器中的临时 cookies 后重试。"
+        return "抖音解析失败：当前视频需要本机浏览器中的新鲜登录态。请先在本机 Chrome 完成抖音登录授权后重试。"
     return message

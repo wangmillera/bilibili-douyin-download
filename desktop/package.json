@@ -1,0 +1,63 @@
+{
+  "name": "bilibili-douyin-downloader-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "dev:full": "concurrently -k \"npm --prefix ../web run dev\" \"wait-on tcp:3000 && electron .\"",
+    "build:renderer": "npm --prefix ../web run build:desktop",
+    "pack": "npm run build:renderer && electron-builder --dir",
+    "dist:mac": "npm run build:renderer && electron-builder --mac dmg",
+    "dist:win": "npm run build:renderer && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^35.2.2",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.fluxcaptionfoundry.desktop",
+    "productName": "B站抖音下载器",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "extraResources": [
+      {
+        "from": "../web/out",
+        "to": "web"
+      },
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "app/**",
+          "desktop_entry.py",
+          "requirements.txt",
+          "scripts/**"
+        ]
+      },
+      {
+        "from": "../backend/.venv",
+        "to": "backend/.venv"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

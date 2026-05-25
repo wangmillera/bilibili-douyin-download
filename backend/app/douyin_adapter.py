@@ -6,9 +6,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests
+import urllib3
 
 from .config import settings
 from .downloader import resolve_cookie_header, transcode_video_for_playback
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def is_douyin_url(url: str) -> bool:
@@ -45,7 +48,13 @@ def download_douyin_video(
         progress_callback(60, "开始下载抖音视频")
 
     source_path = task_dir / "source-video.mp4"
-    with requests.get(info["video_url"], headers=info.get("video_headers") or {}, stream=True, timeout=120) as response:
+    with requests.get(
+        info["video_url"],
+        headers=info.get("video_headers") or {},
+        stream=True,
+        timeout=120,
+        verify=False,
+    ) as response:
         response.raise_for_status()
         total = int(response.headers.get("content-length") or 0)
         downloaded = 0

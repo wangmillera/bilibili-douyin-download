@@ -11,14 +11,22 @@ from .config import settings
 from .jobs import process_task
 from .models import CreateTaskRequest, CreateTaskResponse, SubtitleResponse, TaskRecord
 from .queue import get_queue
-from .task_store import create_task, get_task_dir, load_task, purge_expired_tasks, read_text_file, update_task
+from .task_store import (
+    create_task,
+    get_task_dir,
+    list_recent_tasks,
+    load_task,
+    purge_expired_tasks,
+    read_text_file,
+    update_task,
+)
 from .url_extract import extract_first_url
 
 
 app = FastAPI(title="Video Downloader API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(settings.allowed_origins),
+    allow_origins=["*"] if settings.app_env == "desktop" else list(settings.allowed_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -65,6 +73,12 @@ def submit_task(payload: CreateTaskRequest) -> CreateTaskResponse:
 @app.get("/api/tasks/{task_id}", response_model=TaskRecord)
 def get_task(task_id: str) -> TaskRecord:
     return get_existing_task(task_id)
+
+
+@app.get("/api/tasks", response_model=list[TaskRecord])
+def get_recent_tasks(limit: int = 8) -> list[TaskRecord]:
+    purge_expired_tasks()
+    return list_recent_tasks(limit=limit)
 
 
 @app.get("/api/tasks/{task_id}/subtitle", response_model=SubtitleResponse)
