@@ -56,6 +56,7 @@ select {
   width: min(1460px, calc(100% - 36px));
   margin: 0 auto;
   padding: 18px 0 32px;
+  overflow: hidden;
 }
 
 .settings-modal-shell {
@@ -114,6 +115,8 @@ select {
 .result-stage {
   display: grid;
   gap: 18px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .tool-panel {
@@ -123,6 +126,8 @@ select {
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
   padding: 22px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .panel-heading {
@@ -130,6 +135,13 @@ select {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
+}
+
+.panel-heading > div:first-child {
+  min-width: 0;
+  overflow: hidden;
+  max-width: 75%;
 }
 
 .panel-heading.stacked {
@@ -143,6 +155,7 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .panel-copy {
@@ -483,9 +496,12 @@ select {
 
 .result-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 18px;
   margin-top: 18px;
+  min-width: 0;
+  overflow: hidden;
+  align-items: start;
 }
 
 .media-preview img,
@@ -560,8 +576,11 @@ select {
 }
 
 .result-details {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .fact-strip {
@@ -570,6 +589,13 @@ select {
   gap: 8px;
   padding: 12px 14px;
   color: var(--muted);
+  overflow: hidden;
+}
+
+.fact-strip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fact-strip span:not(:last-child)::after {
@@ -600,9 +626,11 @@ select {
   margin: 0;
   border-top: 1px solid var(--line);
   padding: 14px 16px;
-  max-height: 220px;
+  max-height: 260px;
   overflow: auto;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
   line-height: 1.65;
   font-family: "SFMono-Regular", "JetBrains Mono", "Consolas", monospace;
 }
@@ -664,6 +692,8 @@ select {
   background: #f8fafc;
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .history-item:hover {
@@ -681,6 +711,13 @@ select {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+}
+
+.history-meta > div:first-child {
+  min-width: 0;
+  overflow: hidden;
+  max-width: 70%;
 }
 
 .history-item h3 {
@@ -690,6 +727,7 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .history-item p {

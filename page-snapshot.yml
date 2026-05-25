@@ -1,0 +1,104 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - complementary [ref=e4]:
+        - article [ref=e5]:
+          - generic [ref=e6]:
+            - heading "输入链接并启动处理" [level=2] [ref=e8]
+            - button "打开设置" [ref=e9] [cursor=pointer]:
+              - img [ref=e10]
+          - generic [ref=e13]:
+            - textbox "粘贴 B 站、抖音、YouTube 链接，或抖音 / B 站整段分享文案" [ref=e14]
+            - generic [ref=e15]:
+              - button "请输入链接" [disabled]
+        - article [ref=e16]:
+          - generic [ref=e17]:
+            - heading "已完成" [level=2] [ref=e53]
+            - generic [ref=e54]: 100.0%
+          - generic [ref=e20]:
+            - generic "任务进度" [ref=e21]
+            - paragraph [ref=e22]: 视频和字幕处理完成
+          - generic [ref=e23]:
+            - generic [ref=e24]:
+              - term [ref=e25]: 字幕
+              - definition [ref=e26]: 已生成
+            - generic [ref=e27]:
+              - term [ref=e28]: 视频
+              - definition [ref=e29]: 已生成
+            - generic [ref=e30]:
+              - term [ref=e31]: 时长
+              - definition [ref=e32]: 9:59
+      - generic [ref=e33]:
+        - article [ref=e34]:
+          - generic [ref=e35]:
+            - 'heading "一个视频彻底教会你，在Claude Code中使用Skill 本期视频我将手把手教大家在Claude Code中安装和使用Skill,内容包括：Skill是什么、怎样安装和创建Skill、怎样触发和使用Skill、以及去哪找更多好用的Skill等等等 #claudecode #skills #agent #vibecoding #skill" [level=2] [ref=e56]'
+            - generic [ref=e57]: 已完成
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - button "播放视频" [ref=e58] [cursor=pointer]:
+                - 'img "一个视频彻底教会你，在Claude Code中使用Skill 本期视频我将手把手教大家在Claude Code中安装和使用Skill,内容包括：Skill是什么、怎样安装和创建Skill、怎样触发和使用Skill、以及去哪找更多好用的Skill等等等 #claudecode #skills #agent #vibecoding #skill" [ref=e59]'
+                - generic:
+                  - img
+              - generic [ref=e60]:
+                - link "下载视频" [ref=e61] [cursor=pointer]:
+                  - /url: /api/tasks/d1064a1fcf464459b0ad343bad584d2c/files/video
+                - link "下载字幕" [ref=e62] [cursor=pointer]:
+                  - /url: /api/tasks/d1064a1fcf464459b0ad343bad584d2c/files/subtitle.txt
+                - button "复制字幕" [ref=e63] [cursor=pointer]
+            - generic [ref=e41]:
+              - generic [ref=e43]: 9:59
+              - group [ref=e44]:
+                - generic "字幕预览" [ref=e45] [cursor=pointer]
+                - generic [ref=e64]: Cloud Code之所以说欢迎,不仅是因为Cloud系列模型很强 还因为它打造了一个丰富的skill生态 但我发现现在还有很多人不知道怎么操作 所以本期视频我将手挖手教大家 在Cloud Code中安装和使用skill 内容包括skill是什么 怎样安装和创建skill 怎样触发和使用skill 以及去哪找更多更好用的skill等等 全程无广无废话 希望大家在说上的同时能点赞支持一下 如果能关注一下那就更好了 感谢各位 首先我们先简单说一下skill是什么 以及它有什么作用 skill是Athropec在2025年10月份推出的一个Cloud Code的扩展机制 你可以把它理解成是Cloud Code的技能包 本质上就是一个markdown文件 里面写了一套针对特定任务的提示词和工作流程 比如说你装了一个做PPT的skill 以后你只需要跟他说一句 帮我做个PPT Cloud Code就知道该怎么排版 用什么格式,走什么流程 再比如说你装了一个公众号排版的skill 他就能够直接把markdown转换成公众号 可以直接发布的HTML格式 简单来说,skill就是让Cloud Code从一个通用的AI助手 变成一个在某个领域特别专业的助手 它有三个关键特点 第一,它是可附用的 写好一次以后每次对话都能够用 第二,它是可以分享的 别人写好的skill你装上就能够用 第三,它是自动触发的 你不需要手动指定用哪个skill Cloud Code会根据你的需求 自动匹配合适的skill 当然你也可以用邪高命令的方式手动触发 所以skill本质上就是一种把专家经验 打包成可附用模块的方式 理解了这个后面的内容就比较好懂了 在开始安装之前 我先说一个很多新手容易搞混的点 那就是skill和插件的区别 如果你从文件结构上来看 这个事情其实很好理解 skill本质上就是一个单独的能力目录 它最核心的文件叫skill.md 里面写的是这个skill的用途 提示词,规则和工作流程 如果有需要 它旁边也可以带一些设立文件 参考资料 甚至是脚本 所以你可以把skill理解成 一个专门解决某一个任务的小模块 那plugin是什么呢 如果说skill是小模块 那plugin就更像是一个完整的安装包 它本身是一个更大的目录 里面通常会有一个plugin.json 用来描述这个插件是什么 除了之外 它里面还可以继续包含多个skill 也可以包含别的组件 比如说hooks,agents,mcp servers这些 也就是说plugin不是某一个能力本身 而是把多个能力和配置 一起打包成一个可以安装 分发附用的整体 装进去之后 里面的多个skill和相关配置 就能够一起生效 用一句话总结就是skill是一种能力模块 plugin是打包这些能力模块 和其他组件的容器 理解了这个 我们再来看一下具体怎么安装 总结下来就有两种方式 一种是直接用别人写好的skill 另一种是自己从零创建一个 我们分辨来说 先来看一下如何安装别人的skill 首先我们要知道skill文件应该放在哪里 cladcode有两个目录可以放skill 第一个是项目级目录 就是你项目跟目录下的 delcloud的skills文件夹 放在这里的skill 只在当前项目里面生效 适合跟项目强相关的技能 比如说这个项目专用的代码规范 部署流程之类的 第二个是用户级目录 就是你后目目录下的 delcloud的skills文件夹 放在这里的skill 在所有项目里面都可以用 适合那些通用的技能 比如说做ppt 写文道 排版公众号 这些与距离项目无关的 知道了放哪里 我们再来看一下怎么安装 一共有三种方式 第一种方式是手动复制 这是最简单直接的方式 如果别人分享的 就是一个skill目录 你直接下载下来 放在刚才说的目录里面就可以了 比如说你在github上 看到了一个skill 把他的文件夹下载下来 丢到了项目下的 delcloud的skills文件夹下面 下次打开cladcode的 就会自动识别到 第二种方式 是用第三方工具一键安装 如果你经常逛skills.sh 这里skill分享网站 你会发现 他们通常会提供一行安装命令 类似于这样的 这个命令本质上 就是帮你自动下载skill文件 然后放到正确的目录里面 省得你自己去克隆仓库 手动复制 另外你可能还会看到boax 或者是pnpm delx开头的命令 不用困惑 他们和npx是一回事 只是用了不同的包管理器而已 你电脑上装了哪个 就用哪个 效果完全一样 第三种方式 是通过插件来安装 如果你要装的 不是单个skill 而是一个完整的插件 那就在Cloud code的对话框里面 用邪高命令来安装 如果插件是在官方市场里面 直接执行这个命令就可以了 比如说安装superpowers 使用的就是这个命令 如果插件在第三方市场 你首先需要添加这个市场 然后再用这个命令进行安装 安装完之后 插件里的skill就会自动生效 你不需要再做任何额外的操作 以上三种方式 不管你用哪一种 最终的效果都是一样的 那就是把skill文件 放到了正确的位置 然后Cloud code就能够用了 知道了如何安装别人的skill 下面我们再来看一下 怎样创建自己的skill 不过在讲如何操作之前 你首先要知道一个skill 长什么样子 一个skill就是一个文件夹 里面必须有一个skill.md文件 这个是核心 除此之外 你还可以放一些配套文件 比如说参考文档 是礼模版 甚至是Person或者是Bass脚本 这些配套文件不是必须的 简单的skill 一个skill.md就够了 但如果你的skill比较复杂 就可以把详细的内容 拆到这些文件里面 Cloud code就会在需要的时候自动读取 那skill.md文件应该怎么写呢 它分为两个部分 第一个部分 是文件开头的原信息 用两行横杠包起来 里面写的是这个skill的基本信息 最常用的有这么几个字段 内幕就是技能的名字 也就是写告命令的名字 description就是描述 告诉Cloud code这个技能是干嘛的 什么时候用它 这个描述非常重要 因为Cloud code就是根据这个描述 来判断要不要自动出发这个skill 第二部分就是证文 写的就是你希望Cloud code怎么做的 具体指令 比如说分几步走 做什么格式 注意什么事情 跟你平时写题的词是一样的 只不过是写在了文件里面 举个最简单的例子 比如说你想创建一个 邦尼写给的提交信息的skill 那它的skill.md大概就是长这样 然后把这个文件放到文件夹里面 然后再把这个文件夹放到你项目 或者是用户目录下的 delcloud的skills文件夹下面就装好了 下次你让Cloud code 邦尼写提交信息 它就会自动用这个skill 当然如果你觉得自己手写太麻烦 还有两种更加轻松的方式 第一种是直接在对话里面 直接告诉Cloud code的 比如说帮我创建一个写 commit message的skill 它会自动帮你生成文件 放到正确的位置 第二种是用skill creator这个内置技能 它会一脑你一步一步完成skill的创建 还能帮你做测试和优化 特别适合刚开始接触skill的新手 skill装好之后怎么用呢 其实有两种方式 自动出发和手动出发 先来看一下自动出发 大多数时候你根本不用操心用哪个skill Cloud code会自己判断 那它是怎么判断的呢 还记得我们刚才写skill.md时 里面有一个description描述四段吗 Cloud code会读取所有以安装skill的描述 当你说的话 跟某个skill的描述匹配上了 它就自动用上了 比如说你装了一个描述 写着生成规范的get提交信息的skill 但只要你说帮我写个commit message Cloud code就会自动出发这个skill 不需要你自己指定 所以description写的好不好 直接决定了自动出发准不准 这也是为什么 我前面说这个字弹非常重要的原因 再来看一下手动出发 如果你明确知道要用哪个skill 也可以直接用邪纲命令来出发 在对话框里面输入邪纲、技能名就可以了 比如说输入这个 就会直接出发那个写提交信息的skill 有些skill你可能不想让Cloud code的自动出发 比如说部署或者是发消息 这种带有副作用的操作 让Cloud code自己判断要不要部署 那也有点太吓人了 这个时候你可以在原信息里面 加一行这个参数 加了之后 Cloud code就不会自动出发这个skill了 只有你手动输入邪纲命令才会执行 反过来 如果有一些skill 你只想让Cloud code在背后自己用 不需要出现在邪纲菜单里面 那就设置为这个参数 这样用户就看不到这个skill 但Cloud code觉得有需要的时候 还是会自动调用它 最后再说一下 怎样查看和管理已经安装好的skill 如果你想看看自己装了哪些skill 有两种方式 第一种在对话框里面输入一个邪纲 Cloud code会列出所有可用的skill和命令 你可以继续打字来筛选过滤 第二种 直接输入邪纲skill是命令 它会专门列出所有也安装的skill 看起来更加清晰 那如果你想停用或者是删除 这里要分两种情况 如果是你自己手动安装的skill 想要停用的话 可以去改skill.md里面的原信息 比如说加上这个参数 禁止自动出发 想要彻底删除的话 可以直接把那个skill文件夹删掉就可以了 删完就没了 非常干净 如果是通过插件装的skill 那你就用插件的管理命令 在对二框里面输入邪纲plugin 会打开插件管理命令 在这里你可以看到所有引件安装的插件 想停用哪个 直接在界面里面操作就可以了 总之不管是触发还是管理 cladcode都帮你做的非常简单了 大多数情况下 装好的skill就不用管了 学会了安装和使用之后 你肯定会想 去哪找更多更好用的skill呢 这里我给大家推荐三个方向 第一个是使用官方的插件市场 在cladcode对二框里面输入邪纲plugin 就能够打开官方的插件市场 里面有anthropic官方和社区认证的插件 质量有保证 这是最推荐的渠道 第二个是使用第三方的skill分享网站 比如说skillsmp skills.sh agentskills.sh lopupskills 这些网站收入了大量社区贡献的skill 可以按照分类搜索 还能够查看排行榜和安装量 关于这些网站 我之前专门出过一期视频详细介绍过 感兴趣的同学可以去看看 第三个渠道是github 直接在github上搜cladcodeskill 或者是cladcodeplugin 就能够找到大量开源的skill和插件项目 很多高质量的skill 都是在github上首发的 总之现在cladcode的skill生态已经非常丰富了 不管你是做开发 做设计 还是做内容创作 都能够找到合适自己的skill 好 以上就是本期视频的所有内容 如果对你有一点点帮助 不要忘了点赞 三连加关注 我是阿众 下期再见
+        - article [ref=e46]:
+          - generic [ref=e47]:
+            - heading "任务列表" [level=2] [ref=e49]
+            - generic [ref=e50]: 第 1 / 1 页
+          - generic [ref=e51]:
+            - 'button "一个视频彻底教会你，在Claude Code中使用Skill 本期视频我将手把手教大家在Claude Code中安装和使用Skill,内容包括：Skill是什么、怎样安装和创建Skill、怎样触发和使用Skill、以及去哪找更多好用的Skill等等等 #claudecode #skills #agent #vibecoding #skill 05/25 14:56 已完成 查看任务 复制链接 删除" [ref=e65] [cursor=pointer]':
+              - generic [ref=e66]:
+                - generic [ref=e67]:
+                  - 'heading "一个视频彻底教会你，在Claude Code中使用Skill 本期视频我将手把手教大家在Claude Code中安装和使用Skill,内容包括：Skill是什么、怎样安装和创建Skill、怎样触发和使用Skill、以及去哪找更多好用的Skill等等等 #claudecode #skills #agent #vibecoding #skill" [level=3] [ref=e68]'
+                  - paragraph [ref=e69]: 05/25 14:56
+                - generic [ref=e70]: 已完成
+              - generic [ref=e71]:
+                - button "查看任务" [ref=e72]
+                - button "复制链接" [ref=e73]
+                - button "删除" [ref=e74]
+            - 'button "花300w越南盾找一个女大学生地陪 打卡越南各种特色服务是什么体验？#地陪 #越南地陪 #真实生活分享计划 #旅游vlog #镭老六 05/25 13:47 已完成 查看任务 复制链接 删除" [ref=e75] [cursor=pointer]':
+              - generic [ref=e76]:
+                - generic [ref=e77]:
+                  - 'heading "花300w越南盾找一个女大学生地陪 打卡越南各种特色服务是什么体验？#地陪 #越南地陪 #真实生活分享计划 #旅游vlog #镭老六" [level=3] [ref=e78]'
+                  - paragraph [ref=e79]: 05/25 13:47
+                - generic [ref=e80]: 已完成
+              - generic [ref=e81]:
+                - button "查看任务" [ref=e82]
+                - button "复制链接" [ref=e83]
+                - button "删除" [ref=e84]
+            - button "保持好心情 下周会有意外惊喜等着你#美丽的达令港 05/25 07:52 已完成 查看任务 复制链接 删除" [ref=e85] [cursor=pointer]:
+              - generic [ref=e86]:
+                - generic [ref=e87]:
+                  - heading "保持好心情 下周会有意外惊喜等着你#美丽的达令港" [level=3] [ref=e88]
+                  - paragraph [ref=e89]: 05/25 07:52
+                - generic [ref=e90]: 已完成
+              - generic [ref=e91]:
+                - button "查看任务" [ref=e92]
+                - button "复制链接" [ref=e93]
+                - button "删除" [ref=e94]
+            - button "保持好心情 下周会有意外惊喜等着你#美丽的达令港 05/25 07:52 任务失败 查看任务 复制链接 删除" [ref=e95] [cursor=pointer]:
+              - generic [ref=e96]:
+                - generic [ref=e97]:
+                  - heading "保持好心情 下周会有意外惊喜等着你#美丽的达令港" [level=3] [ref=e98]
+                  - paragraph [ref=e99]: 05/25 07:52
+                - generic [ref=e100]: 任务失败
+              - generic [ref=e101]:
+                - button "查看任务" [ref=e102]
+                - button "复制链接" [ref=e103]
+                - button "删除" [ref=e104]
+          - generic [ref=e105]:
+            - button "上一页" [disabled]
+            - button "1" [ref=e107] [cursor=pointer]
+            - button "下一页" [disabled]
+  - alert [ref=e108]
+  - button "Open Next.js Dev Tools" [ref=e114] [cursor=pointer]:
+    - img [ref=e115]

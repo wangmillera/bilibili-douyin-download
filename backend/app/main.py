@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from .config import settings
 from .downloader import get_desktop_diagnostics
-from .jobs import process_task
+from .jobs import cancel_task, process_task
 from .models import CreateTaskRequest, CreateTaskResponse, SubtitleResponse, TaskRecord
 from .queue import get_queue
 from .task_store import (
@@ -94,6 +94,14 @@ def remove_task(task_id: str) -> dict[str, bool]:
     if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"deleted": True}
+
+
+@app.post("/api/tasks/{task_id}/cancel")
+def cancel_task_endpoint(task_id: str) -> dict[str, str]:
+    cancelled = cancel_task(task_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Task not found or already completed")
+    return {"status": "cancelled", "task_id": task_id}
 
 
 @app.get("/api/tasks/{task_id}/subtitle", response_model=SubtitleResponse)

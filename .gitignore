@@ -14,3 +14,4 @@ backend/playwright-browsers
 *.pyo
 *.DS_Store
 .venv
+.playwright-mcp

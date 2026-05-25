@@ -22,6 +22,7 @@
   "build": {
     "appId": "com.fluxcaptionfoundry.desktop",
     "productName": "B站抖音下载器",
+    "icon": "build/icon.png",
     "files": [
       "main.cjs",
       "preload.cjs",

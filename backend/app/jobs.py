@@ -105,6 +105,8 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
 
         if not subtitles_found:
             set_progress(55, "开始语音转写", status="transcribing")
+            if _is_cancelled(task_id):
+                raise CancelledError("任务已被用户终止")
             transcribe_media(
                 video_path,
                 subtitle_srt_path,
@@ -128,6 +130,14 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
             error_code=None,
             error_message=None,
         )
+    except CancelledError:
+        update_task(
+            task_id,
+            status="failed",
+            status_message="任务已被用户终止",
+            error_code="CancelledError",
+            error_message="任务已被用户终止",
+        )
     except Exception as exc:
         update_task(
             task_id,
@@ -136,6 +146,12 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
             error_code=exc.__class__.__name__,
             error_message=map_error_message(str(exc), cookies_supplied=bool(cookies and cookies.strip())),
         )
+    finally:
+        _cancel_events.pop(task_id, None)
+
+
+class CancelledError(Exception):
+    pass
 
 
 def map_error_message(message: str, cookies_supplied: bool) -> str:

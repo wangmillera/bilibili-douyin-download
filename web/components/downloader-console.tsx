@@ -241,6 +241,9 @@ export function DownloaderConsole() {
     if (isTerminalState) {
       refreshRecentTasks().catch(() => undefined);
     }
+    if (task?.status === "completed") {
+      setUrl("");
+    }
   }, [isTerminalState]);
 
   useEffect(() => {
@@ -428,6 +431,22 @@ export function DownloaderConsole() {
       await refreshRecentTasks();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "删除任务失败");
+    }
+  }
+
+  async function cancelTask(taskId: string) {
+    try {
+      const confirmed = window.confirm("确定要终止这个任务吗？");
+      if (!confirmed) {
+        return;
+      }
+      const response = await fetch(apiUrl(`/api/tasks/${taskId}/cancel`), { method: "POST" });
+      if (!response.ok) {
+        throw new Error("终止任务失败");
+      }
+      await refreshRecentTasks();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "终止任务失败");
     }
   }
 
@@ -684,8 +703,8 @@ export function DownloaderConsole() {
                 required
               />
               <div className="form-actions">
-                <button className="tool-button primary wide" type="submit" disabled={submitting}>
-                  {submitting ? "任务提交中..." : "开始处理"}
+                <button className="tool-button primary wide" type="submit" disabled={submitting || !url.trim() || (!!task && !isTerminalState)}>
+                  {submitting ? "任务提交中..." : !url.trim() ? "请输入链接" : !!task && !isTerminalState ? "正在处理中..." : "开始处理"}
                 </button>
               </div>
             </form>
@@ -718,6 +737,17 @@ export function DownloaderConsole() {
                 <dd>{formatDuration(task?.duration_seconds ?? null)}</dd>
               </div>
             </dl>
+            {task && !isTerminalState ? (
+              <div style={{ marginTop: 14 }}>
+                <button
+                  className="tool-button ghost"
+                  type="button"
+                  onClick={() => cancelTask(task.task_id).catch(() => undefined)}
+                >
+                  终止任务
+                </button>
+              </div>
+            ) : null}
             {error ? (
               <div className="inline-banner error">
                 <strong>错误</strong>
@@ -808,19 +838,6 @@ export function DownloaderConsole() {
               </div>
 
               <div className="result-details">
-                <div className="fact-strip">
-                  <span>{formatDuration(task?.duration_seconds ?? null)}</span>
-                  <span>
-                    {task?.subtitle_source === "embedded"
-                      ? "现成字幕"
-                      : task?.subtitle_source === "automatic"
-                        ? "自动字幕"
-                        : task?.subtitle_source === "asr"
-                          ? "语音转写"
-                          : "等待字幕"}
-                  </span>
-                </div>
-
                 {task?.error_message ? (
                   <div className="inline-banner error">
                     <strong>下载失败</strong>
@@ -926,6 +943,28 @@ export function DownloaderConsole() {
                           查看任务
                         </button>
                       )}
+                      <button
+                        className="mini-button"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigator.clipboard.writeText(item.source_url).catch(() => undefined);
+                        }}
+                      >
+                        复制链接
+                      </button>
+                      {item.status !== "completed" && item.status !== "failed" && item.status !== "expired" ? (
+                        <button
+                          className="mini-button"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            cancelTask(item.task_id).catch(() => undefined);
+                          }}
+                        >
+                          终止
+                        </button>
+                      ) : null}
                       <button
                         className="mini-button mini-button-danger"
                         type="button"
