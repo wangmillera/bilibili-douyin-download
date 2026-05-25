@@ -7,9 +7,10 @@
     "dev": "electron .",
     "dev:full": "concurrently -k \"npm --prefix ../web run dev\" \"wait-on tcp:3000 && electron .\"",
     "build:renderer": "npm --prefix ../web run build:desktop",
-    "pack": "npm run build:renderer && electron-builder --dir",
-    "dist:mac": "npm run build:renderer && electron-builder --mac dmg",
-    "dist:win": "npm run build:renderer && electron-builder --win nsis"
+    "build:backend": "bash ../scripts/install-playwright-browsers.sh",
+    "pack": "npm run build:renderer && npm run build:backend && electron-builder --dir",
+    "dist:mac": "npm run build:renderer && npm run build:backend && electron-builder --mac dmg",
+    "dist:win": "npm run build:renderer && npm run build:backend && electron-builder --win nsis"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
@@ -36,7 +37,15 @@
       },
       {
         "from": "../vendor/douyin-downloader",
-        "to": "douyin-downloader"
+        "to": "douyin-downloader",
+        "filter": [
+          "**/*",
+          "!**/.git/**",
+          "!**/.venv/**",
+          "!**/Downloaded/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
       },
       {
         "from": "../web/out",
@@ -55,13 +64,20 @@
       {
         "from": "../backend/.venv",
         "to": "backend/.venv"
+      },
+      {
+        "from": "../backend/playwright-browsers",
+        "to": "backend/playwright-browsers"
       }
     ],
     "mac": {
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist"
     },
     "win": {
       "target": [

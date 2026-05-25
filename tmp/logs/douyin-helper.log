@@ -20,3 +20,9 @@ Traceback (most recent call last):
   File "/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py", line 128, in probe
     raise RuntimeError(f"Could not extract aweme_id from URL: {resolved_url}")
 RuntimeError: Could not extract aweme_id from URL: https://v.douyin.com/cU2a0zTT5lk/
+[2026-05-25T14:56:49.752276] command=python3 /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py --action probe --repo-dir /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader --url https://v.douyin.com/AkUKl96FFas/ --cookie-file /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/tmp/tasks/d1064a1fcf464459b0ad343bad584d2c/douyin-helper.cookies.txt
+[2026-05-25T14:56:49.754267] pythonpath=/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader:/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader/.venv/lib/python3.13/site-packages
+[2026-05-25T14:56:53.715741] returncode=0
+[2026-05-25T14:56:54.110896] command=python3 /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py --action probe --repo-dir /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader --url https://v.douyin.com/AkUKl96FFas/ --cookie-file /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/tmp/tasks/d1064a1fcf464459b0ad343bad584d2c/douyin-helper.cookies.txt
+[2026-05-25T14:56:54.111471] pythonpath=/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader:/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader/.venv/lib/python3.13/site-packages
+[2026-05-25T14:56:56.132331] returncode=0

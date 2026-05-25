@@ -29,6 +29,7 @@ type TaskStatus =
 
 type TaskRecord = {
   task_id: string;
+  source_url: string;
   platform: string | null;
   title: string | null;
   thumbnail_url: string | null;
@@ -101,6 +102,9 @@ export function DownloaderConsole() {
   const [diagnostics, setDiagnostics] = useState<DesktopDiagnostics | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [playerOpen, setPlayerOpen] = useState(false);
+  const [douyinLoginActive, setDouyinLoginActive] = useState(false);
+  const [douyinLoginLoading, setDouyinLoginLoading] = useState(false);
+  const [douyinCookieCount, setDouyinCookieCount] = useState<number | null>(null);
 
   const isTerminalState = task?.status === "completed" || task?.status === "failed" || task?.status === "expired";
   const runningInDesktop = runtime.isDesktop;
@@ -324,6 +328,65 @@ export function DownloaderConsole() {
     window.setTimeout(() => setCopied(false), 1500);
   }
 
+  function isDouyinCookieError(message: string | null | undefined): boolean {
+    if (!message) {
+      return false;
+    }
+    return (
+      message.includes("douyin-downloader 未能读取视频详情") ||
+      message.includes("请确认本机 Chrome 已登录抖音") ||
+      message.includes("当前 cookies 可能仍然失效") ||
+      message.includes("当前 cookies 已失效或不够新鲜")
+    );
+  }
+
+  async function startDouyinLogin() {
+    setDouyinLoginLoading(true);
+    try {
+      const response = await fetch(apiUrl("/api/douyin/cookies/login"), { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({ detail: "启动失败" }));
+        throw new Error(payload.detail || "启动失败");
+      }
+      setDouyinLoginActive(true);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "抖音登录启动失败");
+    } finally {
+      setDouyinLoginLoading(false);
+    }
+  }
+
+  async function exportDouyinCookies() {
+    setDouyinLoginLoading(true);
+    try {
+      const response = await fetch(apiUrl("/api/douyin/cookies/export"), { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({ detail: "导出失败" }));
+        throw new Error(payload.detail || "导出失败");
+      }
+      const result: { cookie_count: number; key_cookies: string[]; file: string } = await response.json();
+      setDouyinCookieCount(result.cookie_count);
+      setDouyinLoginActive(false);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Cookie 导出失败");
+    } finally {
+      setDouyinLoginLoading(false);
+    }
+  }
+
+  async function cancelDouyinLogin() {
+    setDouyinLoginLoading(true);
+    try {
+      await fetch(apiUrl("/api/douyin/cookies/cancel"), { method: "POST" });
+    } catch {
+      // ignore
+    }
+    setDouyinLoginActive(false);
+    setDouyinLoginLoading(false);
+  }
+
   async function chooseDirectory() {
     const nextSettings = await chooseDownloadDirectory();
     setDesktopSettings(nextSettings);
@@ -376,11 +439,7 @@ export function DownloaderConsole() {
 
   function renderPrimaryVideoAction() {
     if (!task?.video_ready) {
-      return (
-        <button className="tool-button ghost" type="button" disabled>
-          视频处理中
-        </button>
-      );
+      return null;
     }
 
     if (runningInDesktop) {
@@ -396,11 +455,7 @@ export function DownloaderConsole() {
 
   function renderPrimarySubtitleAction() {
     if (!task?.subtitle_ready) {
-      return (
-        <button className="tool-button ghost" type="button" disabled>
-          字幕处理中
-        </button>
-      );
+      return null;
     }
 
     if (runningInDesktop) {
@@ -512,6 +567,47 @@ export function DownloaderConsole() {
               </div>
               {diagnostics?.cookie_read_error ? <p className="diagnostics-error">{diagnostics.cookie_read_error}</p> : null}
             </div>
+
+            <div className="settings-grid">
+              <div className="setting-block">
+                <label>抖音登录状态</label>
+                <div className="path-badge">
+                  {douyinCookieCount !== null
+                    ? `已获取 ${douyinCookieCount} 个抖音 Cookie`
+                    : douyinLoginActive
+                      ? "等待登录中..."
+                      : diagnostics && diagnostics.douyin_cookie_count > 0
+                        ? `浏览器读取了 ${diagnostics.douyin_cookie_count} 个 Cookie`
+                        : "未获取抖音 Cookie"}
+                </div>
+              </div>
+              <div className="settings-actions">
+                {douyinLoginActive ? (
+                  <>
+                    <button className="tool-button ghost" type="button" onClick={exportDouyinCookies} disabled={douyinLoginLoading}>
+                      {douyinLoginLoading ? "导出中..." : "已完成登录"}
+                    </button>
+                    <button className="tool-button ghost" type="button" onClick={cancelDouyinLogin} disabled={douyinLoginLoading}>
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <button className="tool-button ghost" type="button" onClick={startDouyinLogin} disabled={douyinLoginLoading}>
+                    {douyinLoginLoading ? "启动中..." : "登录抖音"}
+                  </button>
+                )}
+              </div>
+            </div>
+            {douyinLoginActive ? (
+              <p className="panel-copy" style={{ padding: "0 12px 12px", color: "var(--info-color)" }}>
+                已在独立浏览器中打开抖音登录页面。请扫码或使用手机号登录，完成后点击「已完成登录」按钮保存 Cookie。
+              </p>
+            ) : null}
+            {douyinCookieCount !== null ? (
+              <p className="panel-copy" style={{ padding: "0 12px 12px", color: "var(--success-color)" }}>
+                已保存 {douyinCookieCount} 个 Cookie，现在可以下载抖音视频了。
+              </p>
+            ) : null}
 
             <div className="settings-toolbar">
               {runningInDesktop ? (
@@ -628,6 +724,35 @@ export function DownloaderConsole() {
                 <p>{error}</p>
               </div>
             ) : null}
+            {isDouyinCookieError(error) || isDouyinCookieError(task?.error_message) ? (
+              <div className="inline-banner info" style={{ marginTop: 8 }}>
+                <p>需要先登录抖音获取 Cookie 才能下载。请在设置中点击「登录抖音」，或在此直接操作：</p>
+                {douyinLoginActive ? (
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <button className="tool-button ghost" type="button" onClick={exportDouyinCookies} disabled={douyinLoginLoading}>
+                      {douyinLoginLoading ? "导出中..." : "已完成登录，导出 Cookie"}
+                    </button>
+                    <button className="tool-button ghost" type="button" onClick={cancelDouyinLogin} disabled={douyinLoginLoading}>
+                      取消
+                    </button>
+                  </div>
+                ) : (
+                  <button className="tool-button ghost" type="button" onClick={startDouyinLogin} disabled={douyinLoginLoading} style={{ marginTop: 6 }}>
+                    {douyinLoginLoading ? "启动中..." : "打开浏览器登录抖音"}
+                  </button>
+                )}
+                {douyinLoginActive ? (
+                  <p style={{ marginTop: 6, color: "var(--info-color)", fontSize: "0.85rem" }}>
+                    请在打开的独立浏览器窗口中登录抖音（扫码或手机号），然后点击上方按钮保存 Cookie。
+                  </p>
+                ) : null}
+                {douyinCookieCount !== null ? (
+                  <p style={{ marginTop: 6, color: "var(--success-color)", fontSize: "0.85rem" }}>
+                    已保存 {douyinCookieCount} 个 Cookie，请重新提交下载链接。
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </article>
         </aside>
 
@@ -700,6 +825,11 @@ export function DownloaderConsole() {
                   <div className="inline-banner error">
                     <strong>下载失败</strong>
                     <p>{task.error_message}</p>
+                  </div>
+                ) : null}
+                {isDouyinCookieError(task?.error_message) ? (
+                  <div className="inline-banner info" style={{ marginTop: 8 }}>
+                    <p>需要先登录抖音获取 Cookie。请打开设置面板，点击「登录抖音」按钮，登录完成后重新提交下载链接即可。</p>
                   </div>
                 ) : null}
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,20 @@ from .douyin_adapter import download_douyin_video, is_douyin_url, probe_douyin_v
 from .task_store import get_task_dir, update_task
 from .transcription import transcribe_media
 
+_cancel_events: dict[str, threading.Event] = {}
+
+
+def cancel_task(task_id: str) -> bool:
+    event = _cancel_events.get(task_id)
+    if event is None:
+        return False
+    event.set()
+    return True
+
+
+def _is_cancelled(task_id: str) -> bool:
+    return _cancel_events.get(task_id, threading.Event()).is_set()
+
 
 def detect_platform(info: dict[str, Any]) -> str:
     extractor = info.get("extractor_key") or info.get("extractor") or "unknown"
@@ -17,6 +32,9 @@ def detect_platform(info: dict[str, Any]) -> str:
 
 def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
     task_dir = get_task_dir(task_id)
+    cancel_event = threading.Event()
+    _cancel_events[task_id] = cancel_event
+
     def set_progress(progress: float, status_message: str, **extra: object) -> None:
         update_task(
             task_id,
@@ -26,6 +44,9 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
         )
 
     try:
+        if _is_cancelled(task_id):
+            raise CancelledError("任务已被用户终止")
+
         set_progress(5, "正在解析视频信息", status="probing")
         uses_douyin_downloader = is_douyin_url(url)
         info = (
@@ -70,6 +91,9 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
                 set_progress(45, "未找到现成字幕，准备自动转写")
 
         set_progress(55, "开始下载视频", status="downloading_video")
+        if _is_cancelled(task_id):
+            raise CancelledError("任务已被用户终止")
+
         video_path = (
             download_douyin_video(url, task_dir, progress_callback=set_progress, cookies=cookies)
             if uses_douyin_downloader

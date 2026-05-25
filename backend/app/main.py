@@ -154,3 +154,106 @@ def guarded_file_response(path: Path, filename: str, media_type: str) -> FileRes
     if not path.exists():
         raise HTTPException(status_code=404, detail="File missing")
     return FileResponse(path, filename=filename, media_type=media_type)
+
+
+# ---------------------------------------------------------------------------
+# Douyin Playwright cookie-login session
+# ---------------------------------------------------------------------------
+
+_DOUYIN_COOKIE_DOMAINS = (
+    "douyin.com",
+    ".douyin.com",
+    "www.douyin.com",
+    "v.douyin.com",
+    ".iesdouyin.com",
+)
+
+_login_state: dict = {
+    "active": False,
+    "playwright": None,
+    "browser": None,
+    "context": None,
+}
+
+
+@app.post("/api/douyin/cookies/login")
+async def start_douyin_login() -> dict[str, str]:
+    if _login_state["active"]:
+        return {"status": "already_active"}
+
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        raise HTTPException(status_code=500, detail="playwright 未安装，请先执行 pip install playwright && playwright install chromium")
+
+    pw = await async_playwright().start()
+    browser = await pw.chromium.launch(headless=False)
+    context = await browser.new_context()
+    page = await context.new_page()
+    await page.goto("https://www.douyin.com/", wait_until="domcontentloaded")
+
+    _login_state["active"] = True
+    _login_state["playwright"] = pw
+    _login_state["browser"] = browser
+    _login_state["context"] = context
+
+    return {"status": "started"}
+
+
+@app.post("/api/douyin/cookies/export")
+async def export_douyin_cookies() -> dict[str, object]:
+    if not _login_state["active"]:
+        raise HTTPException(status_code=400, detail="没有活跃的登录会话，请先调用 /api/douyin/cookies/login")
+
+    context = _login_state["context"]
+    raw_cookies = await context.cookies()
+    cookies = [
+        c for c in raw_cookies
+        if any(c["domain"] == d or c["domain"].endswith(d) for d in _DOUYIN_COOKIE_DOMAINS)
+    ]
+
+    cookie_header = "; ".join(
+        f"{c['name']}={c['value']}" for c in cookies if c.get("name") and c.get("value")
+    )
+    settings.douyin_cookie_file.parent.mkdir(parents=True, exist_ok=True)
+    settings.douyin_cookie_file.write_text(cookie_header + "\n", encoding="utf-8")
+
+    key_names = {"msToken", "ttwid", "odin_tt", "passport_csrf_token", "sid_guard"}
+    found = sorted(c["name"] for c in cookies if c["name"] in key_names)
+
+    await _login_state["browser"].close()
+    await _login_state["playwright"].stop()
+    _login_state["active"] = False
+    _login_state["playwright"] = None
+    _login_state["browser"] = None
+    _login_state["context"] = None
+
+    return {
+        "status": "saved",
+        "cookie_count": len(cookies),
+        "key_cookies": found,
+        "file": str(settings.douyin_cookie_file),
+    }
+
+
+@app.get("/api/douyin/cookies/status")
+async def douyin_login_status() -> dict[str, object]:
+    return {"active": _login_state["active"]}
+
+
+@app.post("/api/douyin/cookies/cancel")
+async def cancel_douyin_login() -> dict[str, str]:
+    if _login_state["active"]:
+        try:
+            await _login_state["browser"].close()
+        except Exception:
+            pass
+        try:
+            await _login_state["playwright"].stop()
+        except Exception:
+            pass
+        _login_state["active"] = False
+        _login_state["playwright"] = None
+        _login_state["browser"] = None
+        _login_state["context"] = None
+    return {"status": "cancelled"}

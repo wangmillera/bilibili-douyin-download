@@ -152,6 +152,7 @@ function backendEnv(currentSettings) {
     YOUTUBE_COOKIE_FILE: path.join(userDataPath, "youtube.cookies.txt"),
     YOUTUBE_COOKIES_BROWSER: currentSettings.preferredBrowser || "chrome",
     YOUTUBE_COOKIES_PROFILE: currentSettings.preferredBrowserProfile || "auto",
+	PLAYWRIGHT_BROWSERS_PATH: path.join(backendRoot(), "playwright-browsers"),
     YOUTUBE_DOWNLOADER: "yt-dlp",
     FFMPEG_BIN: ffmpegBin,
     FFPROBE_BIN: ffprobeBin,

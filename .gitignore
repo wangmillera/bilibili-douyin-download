@@ -9,6 +9,7 @@ build
 tmp/tasks/*
 !tmp/tasks/.gitkeep
 backend/.venv
+backend/playwright-browsers
 *.pyc
 *.pyo
 *.DS_Store

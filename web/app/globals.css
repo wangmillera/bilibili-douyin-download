@@ -140,6 +140,9 @@ select {
   margin: 8px 0 0;
   font-size: 1.3rem;
   letter-spacing: -0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panel-copy {
@@ -444,6 +447,12 @@ select {
   color: var(--error);
 }
 
+.inline-banner.info {
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  color: var(--text-secondary);
+}
+
 .status-pill {
   padding: 0 14px;
   background: rgba(15, 23, 42, 0.06);
@@ -678,6 +687,9 @@ select {
   margin: 0;
   font-size: 0.96rem;
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .history-item p {
