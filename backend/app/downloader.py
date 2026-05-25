@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlparse
 import mimetypes
+import os
+import shutil
 import subprocess
 
 import requests
@@ -36,6 +38,7 @@ SITE_COOKIE_CONFIG = {
         "referer": "https://www.douyin.com/",
         "cookie_file": lambda: settings.douyin_cookie_file,
         "browser": lambda: settings.douyin_cookies_browser,
+        "profile": lambda: settings.douyin_cookies_profile,
     },
     "youtube": {
         "domains": [
@@ -50,8 +53,44 @@ SITE_COOKIE_CONFIG = {
         "referer": "https://www.youtube.com/",
         "cookie_file": lambda: settings.youtube_cookie_file,
         "browser": lambda: settings.youtube_cookies_browser,
+        "profile": lambda: settings.youtube_cookies_profile,
     },
 }
+
+
+def get_desktop_diagnostics() -> dict[str, object]:
+    browser_name = get_site_browser_name("douyin")
+    explicit_profile = get_site_browser_profile("douyin")
+    candidate_profiles = browser_profile_candidates(browser_name, explicit_profile)
+    ffmpeg_path = Path(settings.ffmpeg_bin)
+    ffprobe_path = Path(os.getenv("FFPROBE_BIN", "ffprobe"))
+
+    diagnostics: dict[str, object] = {
+        "chrome_detected": browser_name.lower() == "chrome",
+        "candidate_profiles": [profile or "auto" for profile in candidate_profiles],
+        "selected_profile": explicit_profile,
+        "douyin_cookie_count": 0,
+        "cookie_read_method": None,
+        "cookie_read_error": None,
+        "douyin_helper_repo_exists": settings.douyin_downloader_dir.exists(),
+        "douyin_helper_python_exists": helper_python_available(settings.douyin_downloader_python),
+        "ffmpeg_exists": ffmpeg_path.exists() if ffmpeg_path.is_absolute() else shutil.which(settings.ffmpeg_bin) is not None,
+        "ffprobe_exists": ffprobe_path.exists() if ffprobe_path.is_absolute() else shutil.which(str(ffprobe_path)) is not None,
+    }
+
+    try:
+        jar, method, profile = load_browser_cookie_jar(browser_name, "douyin", with_diagnostics=True)
+        if jar is not None:
+            count = sum(1 for cookie in jar if any(cookie_domain_matches(cookie.domain, domain) for domain in get_site_domains("douyin")))
+            diagnostics["douyin_cookie_count"] = count
+            diagnostics["cookie_read_method"] = method
+            diagnostics["selected_profile"] = profile or explicit_profile
+        elif method:
+            diagnostics["cookie_read_error"] = method
+    except Exception as exc:  # pragma: no cover - diagnostic fallback
+        diagnostics["cookie_read_error"] = str(exc)
+
+    return diagnostics
 
 
 def probe_video(url: str, cookies: str | None = None, task_dir: Path | None = None) -> dict:
@@ -426,7 +465,7 @@ def write_cookie_file(task_dir: Path, url: str, cookie_header: str) -> Path:
 
 
 def export_browser_cookie_file(task_dir: Path, browser_name: str, site_key: str) -> Path | None:
-    jar = load_browser_cookie_jar(browser_name)
+    jar = load_browser_cookie_jar(browser_name, site_key)
     if jar is None:
         return None
 
@@ -441,7 +480,7 @@ def export_browser_cookie_file(task_dir: Path, browser_name: str, site_key: str)
 
 
 def export_browser_cookie_header(browser_name: str, site_key: str) -> str | None:
-    jar = load_browser_cookie_jar(browser_name)
+    jar = load_browser_cookie_jar(browser_name, site_key)
     if jar is None:
         return None
 
@@ -458,21 +497,101 @@ def export_browser_cookie_header(browser_name: str, site_key: str) -> str | None
     return "; ".join(pairs) if pairs else None
 
 
-def load_browser_cookie_jar(browser_name: str):
-    try:
-        return extract_cookies_from_browser(browser_name)
-    except Exception:
-        if browser_cookie3 is None:
-            return None
+def load_browser_cookie_jar(browser_name: str, site_key: str | None = None, with_diagnostics: bool = False):
+    domains = get_site_domains(site_key) if site_key else []
+    explicit_profile = get_site_browser_profile(site_key) if site_key else "auto"
+    last_error: str | None = None
+
+    for profile in browser_profile_candidates(browser_name, explicit_profile):
+        try:
+            kwargs = {"profile": profile} if profile else {}
+            jar = extract_cookies_from_browser(browser_name, **kwargs)
+            if jar_has_matching_domains(jar, domains):
+                return (jar, "yt_dlp", profile) if with_diagnostics else jar
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+
+    if browser_cookie3 is None:
+        if with_diagnostics:
+            return None, None, explicit_profile
+        return None
 
     loader = getattr(browser_cookie3, browser_name.lower(), None)
     if loader is None:
+        if with_diagnostics:
+            return None, None, explicit_profile
         return None
 
     try:
-        return loader()
-    except Exception:
+        if domains:
+            for domain in domains:
+                try:
+                    jar = loader(domain_name=domain.lstrip("."))
+                    if jar_has_matching_domains(jar, domains):
+                        return (jar, "browser_cookie3", explicit_profile) if with_diagnostics else jar
+                except TypeError:
+                    jar = loader()
+                    if jar_has_matching_domains(jar, domains):
+                        return (jar, "browser_cookie3", explicit_profile) if with_diagnostics else jar
+                except Exception as exc:
+                    last_error = str(exc)
+                    continue
+        jar = loader()
+        if jar_has_matching_domains(jar, domains) or not domains:
+            return (jar, "browser_cookie3", explicit_profile) if with_diagnostics else jar
+        if with_diagnostics:
+            return None, None, explicit_profile
         return None
+    except Exception as exc:
+        last_error = str(exc)
+        if with_diagnostics:
+            return None, last_error, explicit_profile
+        return None
+
+
+def browser_profile_candidates(browser_name: str, explicit_profile: str = "auto") -> list[str | None]:
+    if explicit_profile and explicit_profile != "auto":
+        return [explicit_profile]
+
+    candidates: list[str | None] = [None]
+    browser = browser_name.lower()
+    if browser != "chrome":
+        return candidates
+
+    chrome_root = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
+    if not chrome_root.exists():
+        return candidates
+
+    ordered_names = ["Default"]
+    ordered_names.extend(
+        sorted(
+            child.name
+            for child in chrome_root.iterdir()
+            if child.is_dir() and child.name.startswith("Profile ")
+        )
+    )
+
+    for name in ordered_names:
+        if name not in candidates:
+            candidates.append(name)
+    return candidates
+
+
+def helper_python_available(python_path: str) -> bool:
+    candidate = Path(python_path)
+    if candidate.is_absolute():
+        return candidate.exists()
+    return shutil.which(python_path) is not None
+
+
+def jar_has_matching_domains(jar, domains: list[str]) -> bool:
+    if not domains:
+        return True
+    for cookie in jar:
+        if any(cookie_domain_matches(cookie.domain, domain) for domain in domains):
+            return True
+    return False
 
 
 def build_netscape_cookie_lines(jar, site_key: str) -> list[str]:
@@ -507,6 +626,15 @@ def get_site_domains(site_key: str) -> list[str]:
 
 def get_site_browser_name(site_key: str) -> str:
     return str(SITE_COOKIE_CONFIG[site_key]["browser"]())
+
+
+def get_site_browser_profile(site_key: str | None) -> str:
+    if not site_key:
+        return "auto"
+    profile_getter = SITE_COOKIE_CONFIG.get(site_key, {}).get("profile")
+    if not profile_getter:
+        return "auto"
+    return str(profile_getter())
 
 
 def cookie_domain_matches(cookie_domain: str, configured_domain: str) -> bool:

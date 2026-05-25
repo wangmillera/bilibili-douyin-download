@@ -13,7 +13,8 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
-    "electron": "^35.2.2",
+    "dmg-license": "^1.0.11",
+    "electron": "^30.5.1",
     "electron-builder": "^26.0.12",
     "wait-on": "^8.0.3"
   },
@@ -29,6 +30,14 @@
       "output": "dist"
     },
     "extraResources": [
+      {
+        "from": "../bin",
+        "to": "bin"
+      },
+      {
+        "from": "../vendor/douyin-downloader",
+        "to": "douyin-downloader"
+      },
       {
         "from": "../web/out",
         "to": "web"

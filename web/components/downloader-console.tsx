@@ -4,16 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   chooseDownloadDirectory,
+  getDesktopDiagnostics,
   fallbackDesktopRuntime,
   fallbackDesktopSettings,
   getDesktopRuntimeStatus,
   getDesktopSettings,
   hasDesktopBridge,
   openDownloadDirectory,
+  openLogsDirectory,
   openTaskFile,
   updateDesktopSettings,
 } from "../lib/desktop";
-import type { DesktopRuntimeStatus, DesktopSettings } from "../types/desktop";
+import type { DesktopDiagnostics, DesktopRuntimeStatus, DesktopSettings } from "../types/desktop";
 
 type TaskStatus =
   | "queued"
@@ -84,16 +86,21 @@ function formatCreatedAt(value: string): string {
 }
 
 export function DownloaderConsole() {
+  const pageSize = 5;
   const [url, setUrl] = useState("");
   const [task, setTask] = useState<TaskRecord | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [recentTasks, setRecentTasks] = useState<TaskRecord[]>([]);
+  const [taskPage, setTaskPage] = useState(1);
   const [subtitle, setSubtitle] = useState<SubtitleResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [runtime, setRuntime] = useState<DesktopRuntimeStatus>(fallbackDesktopRuntime);
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(fallbackDesktopSettings);
+  const [diagnostics, setDiagnostics] = useState<DesktopDiagnostics | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [playerOpen, setPlayerOpen] = useState(false);
 
   const isTerminalState = task?.status === "completed" || task?.status === "failed" || task?.status === "expired";
   const runningInDesktop = runtime.isDesktop;
@@ -105,11 +112,13 @@ export function DownloaderConsole() {
 
     async function boot() {
       const [nextRuntime, nextSettings] = await Promise.all([getDesktopRuntimeStatus(), getDesktopSettings()]);
+      const nextDiagnostics = await getDesktopDiagnostics();
       if (!active) {
         return;
       }
       setRuntime(nextRuntime);
       setDesktopSettings(nextSettings);
+      setDiagnostics(nextDiagnostics);
     }
 
     boot().catch(() => {
@@ -125,7 +134,7 @@ export function DownloaderConsole() {
     };
   }, []);
 
-  async function refreshRecentTasks(limit = desktopSettings.recentTasksLimit || 8) {
+  async function refreshRecentTasks(limit = 200) {
     try {
       if (hasDesktopBridge()) {
         const tasks = (await window.desktopBridge!.listRecentTasks(limit)) as TaskRecord[];
@@ -144,13 +153,49 @@ export function DownloaderConsole() {
     }
   }
 
+  async function selectTask(nextTask: TaskRecord) {
+    setSelectedTaskId(nextTask.task_id);
+    setTask(nextTask);
+    setSubtitle(null);
+    setCopied(false);
+    setPlayerOpen(false);
+  }
+
   useEffect(() => {
     refreshRecentTasks().catch(() => undefined);
     const timer = window.setInterval(() => {
       refreshRecentTasks().catch(() => undefined);
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [desktopSettings.recentTasksLimit, runtime.backendOrigin]);
+  }, [runtime.backendOrigin]);
+
+  useEffect(() => {
+    if (recentTasks.length === 0) {
+      setTaskPage(1);
+      return;
+    }
+
+    if (!selectedTaskId) {
+      const latestTask = recentTasks[0];
+      setSelectedTaskId(latestTask.task_id);
+      setTask(latestTask);
+      return;
+    }
+
+    const matchingTask = recentTasks.find((item) => item.task_id === selectedTaskId);
+    if (matchingTask) {
+      setTask((currentTask) =>
+        currentTask?.task_id === matchingTask.task_id ? { ...currentTask, ...matchingTask } : matchingTask,
+      );
+    }
+  }, [recentTasks, selectedTaskId]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(recentTasks.length / pageSize));
+    if (taskPage > totalPages) {
+      setTaskPage(totalPages);
+    }
+  }, [recentTasks.length, taskPage]);
 
   useEffect(() => {
     if (!task || isTerminalState) {
@@ -195,19 +240,20 @@ export function DownloaderConsole() {
   }, [isTerminalState]);
 
   useEffect(() => {
-    if (!settingsOpen) {
+    if (!settingsOpen && !playerOpen) {
       return;
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setSettingsOpen(false);
+        setPlayerOpen(false);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settingsOpen]);
+  }, [playerOpen, settingsOpen]);
 
   const statusText = useMemo(() => {
     if (!task) {
@@ -223,13 +269,22 @@ export function DownloaderConsole() {
     return apiUrl(`/api/tasks/${task.task_id}/thumbnail`);
   }, [runtime.backendOrigin, task?.task_id, task?.thumbnail_filename]);
 
+  const videoSrc = useMemo(() => {
+    if (!task?.video_ready) {
+      return null;
+    }
+    return apiUrl(`/api/tasks/${task.task_id}/files/video`);
+  }, [runtime.backendOrigin, task?.task_id, task?.video_ready]);
+
   async function submitTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     setTask(null);
+    setSelectedTaskId(null);
     setSubtitle(null);
     setCopied(false);
+    setPlayerOpen(false);
 
     try {
       const response = await fetch(apiUrl("/api/tasks"), {
@@ -249,7 +304,9 @@ export function DownloaderConsole() {
         throw new Error("任务创建成功，但状态读取失败");
       }
       const nextTask: TaskRecord = await taskResponse.json();
+      setSelectedTaskId(nextTask.task_id);
       setTask(nextTask);
+      setPlayerOpen(false);
       refreshRecentTasks().catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "提交失败");
@@ -271,13 +328,51 @@ export function DownloaderConsole() {
     const nextSettings = await chooseDownloadDirectory();
     setDesktopSettings(nextSettings);
     setRuntime(await getDesktopRuntimeStatus());
+    setDiagnostics(await getDesktopDiagnostics());
   }
 
   async function changeBrowser(browser: DesktopSettings["preferredBrowser"]) {
     const nextSettings = await updateDesktopSettings({ preferredBrowser: browser });
     setDesktopSettings(nextSettings);
     setRuntime(await getDesktopRuntimeStatus());
+    setDiagnostics(await getDesktopDiagnostics());
   }
+
+  async function changeBrowserProfile(profile: string) {
+    const nextSettings = await updateDesktopSettings({ preferredBrowserProfile: profile });
+    setDesktopSettings(nextSettings);
+    setRuntime(await getDesktopRuntimeStatus());
+    setDiagnostics(await getDesktopDiagnostics());
+  }
+
+  async function deleteTask(taskId: string) {
+    try {
+      const confirmed = window.confirm("确定删除这条任务记录及其本地文件吗？");
+      if (!confirmed) {
+        return;
+      }
+      const response = await fetch(apiUrl(`/api/tasks/${taskId}`), { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("删除任务失败");
+      }
+      if (selectedTaskId === taskId) {
+        setSelectedTaskId(null);
+        setTask(null);
+        setSubtitle(null);
+        setCopied(false);
+        setPlayerOpen(false);
+      }
+      await refreshRecentTasks();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "删除任务失败");
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(recentTasks.length / pageSize));
+  const pagedTasks = useMemo(() => {
+    const start = (taskPage - 1) * pageSize;
+    return recentTasks.slice(start, start + pageSize);
+  }, [recentTasks, taskPage]);
 
   function renderPrimaryVideoAction() {
     if (!task?.video_ready) {
@@ -289,15 +384,11 @@ export function DownloaderConsole() {
     }
 
     if (runningInDesktop) {
-      return (
-        <button className="tool-button primary" type="button" onClick={() => openTaskFile(task.task_id, "video")}>
-          打开视频
-        </button>
-      );
+      return null;
     }
 
     return (
-      <a className="tool-button primary" href={apiUrl(`/api/tasks/${task.task_id}/files/video`)}>
+      <a className="tool-button ghost" href={apiUrl(`/api/tasks/${task.task_id}/files/video`)}>
         下载视频
       </a>
     );
@@ -343,8 +434,11 @@ export function DownloaderConsole() {
                 <h2 id="settings-modal-title">下载目录与浏览器</h2>
                 <p className="panel-copy">桌面版默认自动处理浏览器 cookies 与本地下载目录，高级调试项不会展示在主页面。</p>
               </div>
-              <button className="tool-button ghost" type="button" onClick={() => setSettingsOpen(false)}>
-                关闭
+              <button className="icon-button modal-close-button" type="button" aria-label="关闭设置" title="关闭" onClick={() => setSettingsOpen(false)}>
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M7 7L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M17 7L7 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
               </button>
             </div>
 
@@ -374,19 +468,91 @@ export function DownloaderConsole() {
                 </select>
               </div>
               <div className="setting-block">
-                <label>最近任务</label>
-                <div className="path-badge">{desktopSettings.recentTasksLimit} 条</div>
+                <label>浏览器 Profile</label>
+                <select
+                  value={desktopSettings.preferredBrowserProfile}
+                  onChange={(event) => changeBrowserProfile(event.target.value)}
+                  disabled={!runningInDesktop}
+                >
+                  {(diagnostics?.candidate_profiles?.length
+                    ? diagnostics.candidate_profiles
+                    : ["auto", "Default", "Profile 1"]).map((profile) => (
+                    <option key={profile} value={profile}>
+                      {profile}
+                    </option>
+                  ))}
+                </select>
               </div>
+            </div>
+
+            <div className="diagnostics-panel">
+              <div className="diagnostics-row">
+                <span>抖音 Cookies</span>
+                <strong>{diagnostics ? diagnostics.douyin_cookie_count : "--"}</strong>
+              </div>
+              <div className="diagnostics-row">
+                <span>命中 Profile</span>
+                <strong>{diagnostics?.selected_profile || desktopSettings.preferredBrowserProfile}</strong>
+              </div>
+              <div className="diagnostics-row">
+                <span>读取方式</span>
+                <strong>{diagnostics?.cookie_read_method || "未命中"}</strong>
+              </div>
+              <div className="diagnostics-row">
+                <span>Helper</span>
+                <strong>
+                  {diagnostics?.douyin_helper_repo_exists && diagnostics?.douyin_helper_python_exists ? "已内置" : "缺失"}
+                </strong>
+              </div>
+              <div className="diagnostics-row">
+                <span>FFmpeg</span>
+                <strong>
+                  {diagnostics?.ffmpeg_exists && diagnostics?.ffprobe_exists ? "已就绪" : "缺失"}
+                </strong>
+              </div>
+              {diagnostics?.cookie_read_error ? <p className="diagnostics-error">{diagnostics.cookie_read_error}</p> : null}
             </div>
 
             <div className="settings-toolbar">
               {runningInDesktop ? (
-                <button className="tool-button ghost" type="button" onClick={openDownloadDirectory}>
-                  打开目录
-                </button>
+                <>
+                  <button className="tool-button ghost" type="button" onClick={openDownloadDirectory}>
+                    打开目录
+                  </button>
+                  <button className="tool-button ghost" type="button" onClick={openLogsDirectory}>
+                    打开日志
+                  </button>
+                </>
               ) : (
                 <span className="soft-note">网页预览模式</span>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {playerOpen && videoSrc ? (
+        <div className="settings-modal-shell" aria-hidden={false} onClick={() => setPlayerOpen(false)}>
+          <div
+            className="player-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="player-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="panel-heading">
+              <div>
+                <h2 id="player-modal-title">{task?.title ?? "视频预览"}</h2>
+              </div>
+              <button className="icon-button modal-close-button" type="button" aria-label="关闭播放器" title="关闭" onClick={() => setPlayerOpen(false)}>
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M7 7L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M17 7L7 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="player-shell">
+              <video controls autoPlay playsInline src={videoSrc} />
             </div>
           </div>
         </div>
@@ -400,7 +566,16 @@ export function DownloaderConsole() {
                 <h2>输入链接并启动处理</h2>
               </div>
               <button className="icon-button" type="button" aria-label="打开设置" title="设置" onClick={() => setSettingsOpen(true)}>
-                <span aria-hidden="true">⚙</span>
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M10.29 3.86L9.94 5.41C9.84 5.86 9.55 6.24 9.13 6.44C8.71 6.63 8.22 6.63 7.79 6.43L6.31 5.75L4.77 7.29L5.45 8.77C5.65 9.2 5.65 9.69 5.46 10.11C5.26 10.53 4.88 10.82 4.43 10.92L2.88 11.27V13.45L4.43 13.8C4.88 13.9 5.26 14.19 5.46 14.61C5.65 15.03 5.65 15.52 5.45 15.95L4.77 17.43L6.31 18.97L7.79 18.29C8.22 18.09 8.71 18.09 9.13 18.28C9.55 18.48 9.84 18.86 9.94 19.31L10.29 20.86H12.47L12.82 19.31C12.92 18.86 13.21 18.48 13.63 18.28C14.05 18.09 14.54 18.09 14.97 18.29L16.45 18.97L17.99 17.43L17.31 15.95C17.11 15.52 17.11 15.03 17.3 14.61C17.5 14.19 17.88 13.9 18.33 13.8L19.88 13.45V11.27L18.33 10.92C17.88 10.82 17.5 10.53 17.3 10.11C17.11 9.69 17.11 9.2 17.31 8.77L17.99 7.29L16.45 5.75L14.97 6.43C14.54 6.63 14.05 6.63 13.63 6.44C13.21 6.24 12.92 5.86 12.82 5.41L12.47 3.86H10.29Z"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="11.38" cy="12.36" r="3.1" fill="currentColor" />
+                </svg>
               </button>
             </div>
 
@@ -435,10 +610,6 @@ export function DownloaderConsole() {
             </div>
             <dl className="facts-grid">
               <div>
-                <dt>平台</dt>
-                <dd>{task?.platform ?? "未开始"}</dd>
-              </div>
-              <div>
                 <dt>字幕</dt>
                 <dd>{task?.subtitle_ready ? "已生成" : "处理中"}</dd>
               </div>
@@ -471,13 +642,36 @@ export function DownloaderConsole() {
 
             <div className="result-layout">
               <div className="media-preview">
-                {thumbnailSrc ? <img alt={task?.title ?? "thumbnail"} src={thumbnailSrc} /> : <div className="thumbnail-shell">等待生成封面</div>}
+                {thumbnailSrc ? (
+                  <button
+                    className={`thumbnail-button${task?.video_ready ? " thumbnail-button-playable" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      if (task?.video_ready) {
+                        setPlayerOpen(true);
+                      }
+                    }}
+                    disabled={!task?.video_ready}
+                    aria-label={task?.video_ready ? "播放视频" : "等待生成封面"}
+                  >
+                    <img alt={task?.title ?? "thumbnail"} src={thumbnailSrc} />
+                    {task?.video_ready ? (
+                      <span className="play-overlay" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 6.8V17.2C8 17.82 8.68 18.21 9.23 17.89L17.66 13.09C18.22 12.77 18.22 11.97 17.66 11.65L9.23 6.11C8.68 5.79 8 6.18 8 6.8Z" />
+                        </svg>
+                      </span>
+                    ) : null}
+                  </button>
+                ) : (
+                  <div className="thumbnail-shell">等待生成封面</div>
+                )}
                 <div className="result-actions">
                   {renderPrimaryVideoAction()}
                   {renderPrimarySubtitleAction()}
                   {task && runningInDesktop ? (
                     <button className="tool-button ghost" type="button" onClick={() => openTaskFile(task.task_id, "task-dir")}>
-                      打开任务目录
+                      打开视频目录
                     </button>
                   ) : null}
                   {subtitle?.content ? (
@@ -490,7 +684,6 @@ export function DownloaderConsole() {
 
               <div className="result-details">
                 <div className="fact-strip">
-                  <span>{task?.platform ?? "未识别平台"}</span>
                   <span>{formatDuration(task?.duration_seconds ?? null)}</span>
                   <span>
                     {task?.subtitle_source === "embedded"
@@ -521,53 +714,133 @@ export function DownloaderConsole() {
           <article className="tool-panel history-panel">
             <div className="panel-heading">
               <div>
-                <h2>最近任务</h2>
+                <h2>任务列表</h2>
               </div>
-              <span className="soft-note">{recentTasks.length} 条记录</span>
+              <span className="soft-note">
+                第 {taskPage} / {totalPages} 页
+              </span>
             </div>
 
             <div className="history-list">
               {recentTasks.length === 0 ? (
                 <div className="history-empty">还没有历史任务。提交第一个下载任务后，这里会显示最近记录。</div>
               ) : (
-                recentTasks.map((item) => (
-                  <article className="history-item" key={item.task_id}>
+                pagedTasks.map((item) => (
+                  <article
+                    className={`history-item${selectedTaskId === item.task_id ? " history-item-selected" : ""}`}
+                    key={item.task_id}
+                    onClick={() => selectTask(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectTask(item).catch(() => undefined);
+                      }
+                    }}
+                  >
                     <div className="history-meta">
                       <div>
                         <h3>{item.title ?? "未命名任务"}</h3>
-                        <p>
-                          {item.platform ?? "未知平台"} · {formatCreatedAt(item.created_at)}
-                        </p>
+                        <p>{formatCreatedAt(item.created_at)}</p>
                       </div>
                       <span className={`status-pill status-${item.status}`}>{statusLabels[item.status]}</span>
                     </div>
                     <div className="history-actions">
                       {runningInDesktop ? (
                         <>
-                          <button className="mini-button" type="button" onClick={() => openTaskFile(item.task_id, "task-dir")}>
+                          <button
+                            className="mini-button"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openTaskFile(item.task_id, "task-dir").catch(() => undefined);
+                            }}
+                          >
                             打开目录
                           </button>
                           {item.subtitle_ready ? (
-                            <button className="mini-button" type="button" onClick={() => openTaskFile(item.task_id, "subtitle-txt")}>
+                            <button
+                              className="mini-button"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTaskFile(item.task_id, "subtitle-txt").catch(() => undefined);
+                              }}
+                            >
                               打开字幕
                             </button>
                           ) : null}
                           {item.video_ready ? (
-                            <button className="mini-button" type="button" onClick={() => openTaskFile(item.task_id, "video")}>
+                            <button
+                              className="mini-button"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTaskFile(item.task_id, "video").catch(() => undefined);
+                              }}
+                            >
                               打开视频
                             </button>
                           ) : null}
                         </>
                       ) : (
-                        <button className="mini-button" type="button" onClick={() => setTask(item)}>
+                        <button
+                          className="mini-button"
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setTask(item);
+                          }}
+                        >
                           查看任务
                         </button>
                       )}
+                      <button
+                        className="mini-button mini-button-danger"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteTask(item.task_id).catch(() => undefined);
+                        }}
+                      >
+                        删除
+                      </button>
                     </div>
                   </article>
                 ))
               )}
             </div>
+            {recentTasks.length > 0 ? (
+              <div className="history-pagination">
+                <button className="mini-button" type="button" disabled={taskPage <= 1} onClick={() => setTaskPage((page) => Math.max(1, page - 1))}>
+                  上一页
+                </button>
+                <div className="page-jump-group">
+                  {Array.from({ length: totalPages }, (_, index) => {
+                    const page = index + 1;
+                    return (
+                      <button
+                        key={page}
+                        className={`mini-button page-number-button${page === taskPage ? " page-number-button-active" : ""}`}
+                        type="button"
+                        onClick={() => setTaskPage(page)}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  className="mini-button"
+                  type="button"
+                  disabled={taskPage >= totalPages}
+                  onClick={() => setTaskPage((page) => Math.min(totalPages, page + 1))}
+                >
+                  下一页
+                </button>
+              </div>
+            ) : null}
           </article>
         </section>
       </section>

@@ -135,9 +135,9 @@ def map_error_message(message: str, cookies_supplied: bool) -> str:
     if "Failed to get Douyin video detail" in message:
         if cookies_supplied:
             return "抖音解析失败：douyin-downloader 未能读取视频详情，当前 cookies 可能仍然失效。"
-        return "抖音解析失败：douyin-downloader 未能读取视频详情。请先在本机 Chrome 完成抖音登录授权后重试。"
+        return "抖音解析失败：douyin-downloader 未能读取视频详情。请确认本机 Chrome 已登录抖音，并允许应用读取浏览器数据后重试。"
     if "Fresh cookies" in message or "cookies" in lowered and "douyin" in lowered:
         if cookies_supplied:
             return "抖音解析失败：当前 cookies 已失效或不够新鲜，请重新从浏览器复制最新 cookies 后再试。"
-        return "抖音解析失败：当前视频需要本机浏览器中的新鲜登录态。请先在本机 Chrome 完成抖音登录授权后重试。"
+        return "抖音解析失败：当前视频需要本机浏览器中的新鲜登录态。请确认本机 Chrome 已登录抖音，并允许应用读取浏览器数据后重试。"
     return message

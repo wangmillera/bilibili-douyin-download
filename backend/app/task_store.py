@@ -87,6 +87,14 @@ def purge_expired_tasks() -> list[str]:
     return removed
 
 
+def delete_task(task_id: str) -> bool:
+    task_dir = get_task_dir(task_id)
+    if not task_dir.exists():
+        return False
+    shutil.rmtree(task_dir, ignore_errors=True)
+    return True
+
+
 def list_recent_tasks(limit: int = 8) -> list[TaskRecord]:
     records: list[TaskRecord] = []
     for task_dir in settings.tasks_dir.iterdir():

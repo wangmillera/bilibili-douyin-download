@@ -1,0 +1,26 @@
+command=/opt/miniconda3/bin/python3.13 /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py --action probe --repo-dir /Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/vendor/douyin-downloader --url https://v.douyin.com/cU2a0zTT5lk/ --cookie-file ../tmp/adapter-test/douyin-helper.cookies.txt
+returncode=1
+stdout=
+
+
+stderr=
+2026-05-25 21:27:11 - APIClient - ERROR - Failed to resolve short URL: https://v.douyin.com/cU2a0zTT5lk/, error: Cannot connect to host v.douyin.com:443 ssl:default [nodename nor servname provided, or not known]
+Traceback (most recent call last):
+  File "/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py", line 164, in <module>
+    main()
+    ~~~~^^
+  File "/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py", line 159, in main
+    payload = asyncio.run(probe(args.repo_dir, args.url, args.cookie_file))
+  File "/opt/miniconda3/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/opt/miniconda3/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/miniconda3/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/wangmengliang/Desktop/codex-workspace/video-yt-dlp/backend/scripts/douyin_downloader_helper.py", line 128, in probe
+    raise RuntimeError(f"Could not extract aweme_id from URL: {resolved_url}")
+RuntimeError: Could not extract aweme_id from URL: https://v.douyin.com/cU2a0zTT5lk/
+

@@ -21,6 +21,7 @@ function loadSettings() {
   const defaults = {
     downloadDirectory: "",
     preferredBrowser: "chrome",
+    preferredBrowserProfile: "auto",
     developerMode: false,
     recentTasksLimit: DEFAULT_RECENT_TASKS_LIMIT,
   };
@@ -62,6 +63,50 @@ function backendRoot() {
   return app.isPackaged ? path.join(process.resourcesPath, "backend") : path.join(__dirname, "..", "backend");
 }
 
+function douyinDownloaderRoot() {
+  return app.isPackaged ? path.join(process.resourcesPath, "douyin-downloader") : path.join(__dirname, "..", "vendor", "douyin-downloader");
+}
+
+function douyinDownloaderPython() {
+  return resolvePythonExecutable();
+}
+
+function resolveFfmpegBinary() {
+  const candidates = [
+    path.join(process.resourcesPath, "bin", "ffmpeg"),
+    path.join(__dirname, "..", "bin", "ffmpeg"),
+    "/opt/homebrew/bin/ffmpeg",
+    "/usr/local/bin/ffmpeg",
+    "/usr/bin/ffmpeg",
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+}
+
+function resolveFfprobeBinary() {
+  const candidates = [
+    path.join(process.resourcesPath, "bin", "ffprobe"),
+    path.join(__dirname, "..", "bin", "ffprobe"),
+    "/opt/homebrew/bin/ffprobe",
+    "/usr/local/bin/ffprobe",
+    "/usr/bin/ffprobe",
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return process.platform === "win32" ? "ffprobe.exe" : "ffprobe";
+}
+
 function resolvePythonExecutable() {
   const root = backendRoot();
   const candidates = app.isPackaged
@@ -85,18 +130,31 @@ function resolvePythonExecutable() {
 
 function backendEnv(currentSettings) {
   const userDataPath = app.getPath("userData");
+  const logsDir = path.join(userDataPath, "logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+  const ffmpegBin = resolveFfmpegBinary();
+  const ffprobeBin = resolveFfprobeBinary();
+  const ffmpegDir = path.dirname(ffmpegBin);
   return {
     ...process.env,
+    PATH: `${ffmpegDir}${path.delimiter}${process.env.PATH || ""}`,
     APP_ENV: "desktop",
     QUEUE_MODE: "inline",
     DESKTOP_BACKEND_HOST,
     DESKTOP_BACKEND_PORT: String(DESKTOP_BACKEND_PORT),
     TASKS_DIR: path.join(currentSettings.downloadDirectory, "tasks"),
+    APP_LOG_DIR: logsDir,
     DOUYIN_COOKIE_FILE: path.join(userDataPath, "douyin.cookies.txt"),
     DOUYIN_COOKIES_BROWSER: currentSettings.preferredBrowser || "chrome",
+    DOUYIN_COOKIES_PROFILE: currentSettings.preferredBrowserProfile || "auto",
+    DOUYIN_DOWNLOADER_DIR: douyinDownloaderRoot(),
+    DOUYIN_DOWNLOADER_PYTHON: douyinDownloaderPython(),
     YOUTUBE_COOKIE_FILE: path.join(userDataPath, "youtube.cookies.txt"),
     YOUTUBE_COOKIES_BROWSER: currentSettings.preferredBrowser || "chrome",
+    YOUTUBE_COOKIES_PROFILE: currentSettings.preferredBrowserProfile || "auto",
     YOUTUBE_DOWNLOADER: "yt-dlp",
+    FFMPEG_BIN: ffmpegBin,
+    FFPROBE_BIN: ffprobeBin,
   };
 }
 
@@ -125,10 +183,14 @@ async function startBackend(currentSettings) {
   await stopBackend();
 
   const entryFile = path.join(backendRoot(), "desktop_entry.py");
+  const logsDir = path.join(app.getPath("userData"), "logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+  const stdoutLog = fs.openSync(path.join(logsDir, "desktop-backend.stdout.log"), "a");
+  const stderrLog = fs.openSync(path.join(logsDir, "desktop-backend.stderr.log"), "a");
   backendProcess = spawn(resolvePythonExecutable(), [entryFile], {
     cwd: backendRoot(),
     env: backendEnv(currentSettings),
-    stdio: "ignore",
+    stdio: ["ignore", stdoutLog, stderrLog],
     windowsHide: true,
   });
 
@@ -182,7 +244,7 @@ function safeReadTaskMeta(taskId) {
 }
 
 async function restartBackendIfNeeded(changes) {
-  if ("downloadDirectory" in changes || "preferredBrowser" in changes) {
+  if ("downloadDirectory" in changes || "preferredBrowser" in changes || "preferredBrowserProfile" in changes) {
     await startBackend(loadSettings());
   }
 }
@@ -217,6 +279,12 @@ ipcMain.handle("desktop:choose-download-directory", async () => {
 ipcMain.handle("desktop:open-download-directory", async () => {
   const currentSettings = loadSettings();
   return shell.openPath(currentSettings.downloadDirectory);
+});
+
+ipcMain.handle("desktop:open-logs-directory", async () => {
+  const logsDir = path.join(app.getPath("userData"), "logs");
+  fs.mkdirSync(logsDir, { recursive: true });
+  return shell.openPath(logsDir);
 });
 
 ipcMain.handle("desktop:open-task-file", async (_event, payload) => {
@@ -255,6 +323,18 @@ ipcMain.handle("desktop:list-recent-tasks", async (_event, limit = DEFAULT_RECEN
     return response.json();
   } catch {
     return [];
+  }
+});
+
+ipcMain.handle("desktop:get-diagnostics", async () => {
+  try {
+    const response = await fetch(`${DESKTOP_BACKEND_ORIGIN}/api/desktop/diagnostics`);
+    if (!response.ok) {
+      return null;
+    }
+    return response.json();
+  } catch {
+    return null;
   }
 });
 

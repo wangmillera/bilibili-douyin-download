@@ -5,6 +5,7 @@ const isDesktopExport = process.env.NEXT_OUTPUT_MODE === "export";
 const nextConfig = isDesktopExport
   ? {
       output: "export",
+      assetPrefix: "./",
     }
   : {
       async rewrites() {

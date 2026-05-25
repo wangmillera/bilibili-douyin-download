@@ -1,8 +1,9 @@
-import type { DesktopRuntimeStatus, DesktopSettings, TaskFileKind } from "../types/desktop";
+import type { DesktopDiagnostics, DesktopRuntimeStatus, DesktopSettings, TaskFileKind } from "../types/desktop";
 
 export const fallbackDesktopSettings: DesktopSettings = {
   downloadDirectory: "",
   preferredBrowser: "chrome",
+  preferredBrowserProfile: "auto",
   developerMode: false,
   recentTasksLimit: 8,
 };
@@ -46,6 +47,13 @@ export async function openDownloadDirectory(): Promise<void> {
   await window.desktopBridge!.openDownloadDirectory();
 }
 
+export async function openLogsDirectory(): Promise<void> {
+  if (!hasDesktopBridge()) {
+    return;
+  }
+  await window.desktopBridge!.openLogsDirectory();
+}
+
 export async function openTaskFile(taskId: string, kind: TaskFileKind): Promise<void> {
   if (!hasDesktopBridge()) {
     return;
@@ -58,4 +66,11 @@ export async function getDesktopRuntimeStatus(): Promise<DesktopRuntimeStatus> {
     return fallbackDesktopRuntime;
   }
   return window.desktopBridge!.getRuntimeStatus();
+}
+
+export async function getDesktopDiagnostics(): Promise<DesktopDiagnostics | null> {
+  if (!hasDesktopBridge()) {
+    return null;
+  }
+  return window.desktopBridge!.getDiagnostics();
 }

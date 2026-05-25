@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from datetime import datetime
 
 import requests
 import urllib3
@@ -12,6 +15,40 @@ from .config import settings
 from .downloader import resolve_cookie_header, transcode_video_for_playback
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def append_log(name: str, message: str) -> None:
+    log_path = settings.app_log_dir / name
+    timestamp = datetime.utcnow().isoformat()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        (log_path.read_text(encoding="utf-8") if log_path.exists() else "") + f"[{timestamp}] {message}\n",
+        encoding="utf-8",
+    )
+
+
+def helper_python_exists(python_path: str) -> bool:
+    candidate = Path(python_path)
+    return candidate.exists() if candidate.is_absolute() else bool(shutil.which(python_path))
+
+
+def vendor_site_packages(repo_dir: Path) -> list[Path]:
+    candidates = sorted(repo_dir.glob(".venv/lib/python*/site-packages"))
+    windows_candidate = repo_dir / ".venv" / "Lib" / "site-packages"
+    if windows_candidate.exists():
+        candidates.append(windows_candidate)
+    return [path.resolve() for path in candidates if path.exists()]
+
+
+def helper_env(repo_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    pythonpath_entries = [str(repo_dir)]
+    pythonpath_entries.extend(str(path) for path in vendor_site_packages(repo_dir))
+    existing_pythonpath = env.get("PYTHONPATH")
+    if existing_pythonpath:
+        pythonpath_entries.append(existing_pythonpath)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+    return env
 
 
 def is_douyin_url(url: str) -> bool:
@@ -88,13 +125,14 @@ def normalize_douyin_url(url: str) -> str:
 def _run_helper(action: str, url: str, task_dir: Path, cookie_header: str | None) -> dict:
     repo_dir = settings.douyin_downloader_dir
     helper_python = settings.douyin_downloader_python
+    task_dir.mkdir(parents=True, exist_ok=True)
     if not repo_dir.exists():
         raise FileNotFoundError(
             f"douyin-downloader not found: {repo_dir}. Set DOUYIN_DOWNLOADER_DIR to the cloned project path."
         )
-    if not Path(helper_python).exists():
+    if not helper_python_exists(helper_python):
         raise FileNotFoundError(
-            f"douyin-downloader python not found: {helper_python}. Set DOUYIN_DOWNLOADER_PYTHON to the downloader virtualenv python."
+            f"douyin-downloader python not found: {helper_python}. Set DOUYIN_DOWNLOADER_PYTHON to the bundled backend python."
         )
 
     cookie_path = task_dir / "douyin-helper.cookies.txt"
@@ -116,7 +154,18 @@ def _run_helper(action: str, url: str, task_dir: Path, cookie_header: str | None
         "--cookie-file",
         str(cookie_path),
     ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    append_log("douyin-helper.log", f"command={' '.join(command)}")
+    env = helper_env(repo_dir)
+    append_log("douyin-helper.log", f"pythonpath={env.get('PYTHONPATH', '')}")
+    result = subprocess.run(command, capture_output=True, text=True, check=False, env=env)
+    helper_log_path = task_dir / "douyin-helper.log"
+    helper_log_path.write_text(
+        f"command={' '.join(command)}\nreturncode={result.returncode}\nstdout=\n{result.stdout}\n\nstderr=\n{result.stderr}\n",
+        encoding="utf-8",
+    )
+    append_log("douyin-helper.log", f"returncode={result.returncode}")
+    if result.stderr.strip():
+        append_log("douyin-helper.log", f"stderr={result.stderr.strip()}")
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "douyin-downloader helper failed"
         raise RuntimeError(message)

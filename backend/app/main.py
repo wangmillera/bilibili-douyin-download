@@ -8,11 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .config import settings
+from .downloader import get_desktop_diagnostics
 from .jobs import process_task
 from .models import CreateTaskRequest, CreateTaskResponse, SubtitleResponse, TaskRecord
 from .queue import get_queue
 from .task_store import (
     create_task,
+    delete_task,
     get_task_dir,
     list_recent_tasks,
     load_task,
@@ -47,6 +49,11 @@ def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/desktop/diagnostics")
+def desktop_diagnostics() -> dict[str, object]:
+    return get_desktop_diagnostics()
+
+
 @app.post("/api/tasks", response_model=CreateTaskResponse)
 def submit_task(payload: CreateTaskRequest) -> CreateTaskResponse:
     purge_expired_tasks()
@@ -79,6 +86,14 @@ def get_task(task_id: str) -> TaskRecord:
 def get_recent_tasks(limit: int = 8) -> list[TaskRecord]:
     purge_expired_tasks()
     return list_recent_tasks(limit=limit)
+
+
+@app.delete("/api/tasks/{task_id}")
+def remove_task(task_id: str) -> dict[str, bool]:
+    deleted = delete_task(task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"deleted": True}
 
 
 @app.get("/api/tasks/{task_id}/subtitle", response_model=SubtitleResponse)

@@ -15,12 +15,15 @@ class Settings:
     youtube_cookies_browser: str = os.getenv("YOUTUBE_COOKIES_BROWSER", "chrome")
     youtube_downloader: str = os.getenv("YOUTUBE_DOWNLOADER", "yt-dlp")
     douyin_downloader_dir: Path = Path(
-        os.getenv("DOUYIN_DOWNLOADER_DIR", "/private/tmp/douyin-downloader")
+        os.getenv("DOUYIN_DOWNLOADER_DIR", "../vendor/douyin-downloader")
     ).resolve()
     douyin_downloader_python: str = os.getenv(
         "DOUYIN_DOWNLOADER_PYTHON",
-        "/private/tmp/douyin-downloader/.venv/bin/python",
+        os.getenv("PYTHON", "python3"),
     )
+    douyin_cookies_profile: str = os.getenv("DOUYIN_COOKIES_PROFILE", "auto")
+    youtube_cookies_profile: str = os.getenv("YOUTUBE_COOKIES_PROFILE", "auto")
+    app_log_dir: Path = Path(os.getenv("APP_LOG_DIR", "../tmp/logs")).resolve()
     task_ttl_seconds: int = int(os.getenv("TASK_TTL_SECONDS", "86400"))
     ytdlp_bin: str = os.getenv("YTDLP_BIN", "yt-dlp")
     ffmpeg_bin: str = os.getenv("FFMPEG_BIN", "ffmpeg")
@@ -39,3 +42,4 @@ settings = Settings()
 settings.tasks_dir.mkdir(parents=True, exist_ok=True)
 settings.douyin_cookie_file.parent.mkdir(parents=True, exist_ok=True)
 settings.youtube_cookie_file.parent.mkdir(parents=True, exist_ok=True)
+settings.app_log_dir.mkdir(parents=True, exist_ok=True)
