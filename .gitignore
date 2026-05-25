@@ -1,6 +1,8 @@
 .next
 .next.bak.*
 node_modules
+web/out
+web/tsconfig.tsbuildinfo
 __pycache__
 .pytest_cache
 .venv
