@@ -1,275 +1,285 @@
-# Video Downloader MVP
+# B站抖音下载器
 
-本地优先的视频下载站，前端使用 `Next.js`，后端使用 `FastAPI + Redis + RQ`，下载和字幕处理依赖 `yt-dlp`、`ffmpeg` 和 `faster-whisper`。产品定位为 `B 站稳定支持，抖音实验支持`。当前抖音视频链路改为优先走 `douyin-downloader`。
+本地优先的视频下载工具，支持 **B站（Bilibili）**、**YouTube** 和 **抖音（Douyin）** 三大平台的视频下载与字幕提取。桌面客户端运行，所有数据本地处理，无需注册账号，即开即用。
 
-## 功能
+## 功能特性
 
-- 粘贴 B 站链接，或尝试抖音等实验支持链接
-- 异步解析任务状态
-- 优先提取现成字幕
-- 无现成字幕时自动转写
-- 下载视频、`SRT` 字幕和纯文本字幕
+| 功能 | 说明 |
+|------|------|
+| 视频下载 | 支持 B站、YouTube、抖音视频一键下载 |
+| 字幕提取 | 自动提取内嵌字幕，或通过 AI 语音转写生成 |
+| 视频预览 | 内置播放器，下载完成后可直接预览 |
+| 历史管理 | 所有下载任务自动保存，支持查看、重试、删除 |
+| 深色/浅色模式 | 支持主题切换，适配不同使用环境 |
+| 抖音 Cookie 登录 | 内置浏览器登录流程，轻松获取抖音下载权限 |
 
-## 本地启动
+## 支持平台
 
-### 1. 后端
+| 平台 | 状态 | 说明 |
+|------|------|------|
+| B站（Bilibili） | 稳定 | 通过 yt-dlp 直接下载 |
+| 抖音（Douyin） | 实验性 | 需要登录获取 Cookie，通过外部工具下载 |
+| YouTube | 不稳定 | 通过 yt-dlp 下载，易触发机器人校验 |
+
+## 快速开始（开发）
+
+### 后端
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-如果你要在本地开发时使用备用的浏览器抓取脚本，再额外安装：
-
-```bash
-pip install playwright
-python -m playwright install chromium
-```
-
-如果你要让后端直接调用 `douyin-downloader` 的抖音解析能力，需要先把该项目克隆到本机，并通过环境变量指向它：
-
-```bash
-git clone https://github.com/jiji262/douyin-downloader.git /private/tmp/douyin-downloader
-```
-
-### 2. Worker
-
-```bash
-cd backend
-source .venv/bin/activate
-python worker.py
-```
-
-### 3. Redis
-
-```bash
-docker run --rm -p 6379:6379 redis:7-alpine
-```
-
-如果本机暂时没有 `Redis` 或 `Docker Desktop`，开发期可以直接改用内联模式：
-
-```bash
-cd backend
-source .venv/bin/activate
 QUEUE_MODE=inline uvicorn app.main:app --reload --port 8000
 ```
 
-这个模式会在 API 进程内直接异步处理任务，不需要额外启动 `Redis` 和 `worker`，但只适合本地开发。
+> `QUEUE_MODE=inline` 无需 Redis/Worker，适合本地开发。生产模式使用 `redis` 并另启 `python worker.py`。
 
-### 4. 前端
+### 前端
 
 ```bash
 cd web
-npm install
-npm run dev
+npm install && npm run dev
 ```
-
-默认访问：
 
 - 前端：`http://localhost:3000`
 - 后端：`http://localhost:8000`
 
-开发期通过 Next.js rewrite 将 `/api/*` 转发到后端，避免浏览器跨域问题。
-
-## 抖音浏览器授权
-
-抖音为实验支持平台。当前默认链路会优先读取你本机真实浏览器中的抖音 cookies，不再要求用户手工粘贴 cookies。
-
-桌面版或本地模式下，先在你本机的 `Chrome` 中完成抖音登录，然后直接提交链接即可。后端会自动读取浏览器态，并写成 `douyin-downloader` 可用的临时 cookie 文件。
-
-默认浏览器可通过环境变量切换：
+### 桌面客户端
 
 ```bash
-DOUYIN_COOKIES_BROWSER=chrome
+cd desktop
+npm install
+npm run dev:full          # 开发模式
+npm run dist:mac          # 构建 macOS DMG
+npm run dist:win          # 构建 Windows 安装包
 ```
 
-也可以改成 `edge` 或 `safari`。
+> 构建前需先执行 `cd web && npm run build:desktop` 导出前端静态资源。
 
-如果你仍然需要调试备用的旧抓取流程，才使用下面这个脚本：
-
-```bash
-cd backend
-source .venv/bin/activate
-python scripts/fetch_douyin_cookies.py
-```
-
-脚本会打开一个独立的 Chromium，并在你登录后导出 `tmp/douyin.cookies.txt` 和 `tmp/douyin.cookies.json`。这条链路现在只作为备用调试工具，不是主授权方式。
-
-也可以通过环境变量改路径：
-
-```bash
-DOUYIN_COOKIE_FILE=../tmp/douyin.cookies.txt
-DOUYIN_COOKIES_BROWSER=chrome
-```
-
-抖音适配层也支持自定义 `douyin-downloader` 本地路径：
-
-```bash
-DOUYIN_DOWNLOADER_DIR=/private/tmp/douyin-downloader
-DOUYIN_DOWNLOADER_PYTHON=/private/tmp/douyin-downloader/.venv/bin/python
-```
-
-## YouTube 本地 Cookie 抓取
-
-YouTube 如果出现 “Sign in to confirm you're not a bot”，本地开发时也走同样的浏览器 cookie 抓取策略。
-
-默认情况下，后端会先尝试直接读取你本机真实浏览器的 cookies：
-
-- `chrome`（默认）
-- 也可以通过环境变量切到 `edge`、`safari` 等 `yt-dlp` 支持的浏览器
-
-```bash
-cd backend
-source .venv/bin/activate
-python scripts/fetch_youtube_cookies.py
-```
-
-脚本会：
-
-- 打开 Chromium
-- 让你手动登录 YouTube
-- 回到终端按回车后导出 cookies
-- 写入 `tmp/youtube.cookies.txt`
-- 同时写入调试用的 `tmp/youtube.cookies.json`
-
-后端会在以下条件下自动读取这个文件：
-
-- 请求链接属于 `youtube.com` / `youtu.be`
-- 页面里没有手工粘贴 cookies
-
-也可以通过环境变量改路径：
-
-```bash
-YOUTUBE_COOKIE_FILE=../tmp/youtube.cookies.txt
-YOUTUBE_COOKIES_BROWSER=chrome
-YOUTUBE_DOWNLOADER=yt-dlp
-```
-
-- `YOUTUBE_DOWNLOADER=yt-dlp` 为默认值
-- 如果要切回实验性的旧下载器，可设为 `YOUTUBE_DOWNLOADER=youtube-dl`
-
-## Docker Compose
+### Docker
 
 ```bash
 docker-compose up --build
 ```
 
-## 桌面版开发
+## 技术栈
 
-### 目录
+- **前端**：Next.js + React
+- **后端**：FastAPI + Redis + RQ
+- **桌面壳**：Electron
+- **下载引擎**：yt-dlp + ffmpeg
+- **字幕转写**：faster-whisper
+- **抖音支持**：douyin-downloader（外部项目）
 
-- `desktop/`：Electron 桌面壳
-- `web/`：桌面版渲染层 UI
-- `backend/`：内置本地下载引擎
+---
 
-### 本地开发启动
+# 使用说明
 
-先确保后端虚拟环境和前端依赖已经安装，然后安装桌面壳依赖：
+## 软件简介
 
-```bash
-cd desktop
-npm install
-```
+B站抖音下载器是一款本地优先的视频下载工具，支持 **B站（Bilibili）**、**YouTube** 和 **抖音（Douyin）** 三大平台的视频下载与字幕提取。软件采用桌面客户端形式运行，所有数据均在本地处理，无需注册账号，即开即用。
 
-开发模式会自动拉起前端 dev server 和 Electron 窗口，后端由 Electron 主进程自动启动：
+### 核心功能
 
-```bash
-cd desktop
-npm run dev:full
-```
+| 功能 | 说明 |
+|------|------|
+| 视频下载 | 支持 B站、YouTube、抖音视频一键下载 |
+| 字幕提取 | 自动提取视频内嵌字幕，或通过 AI 语音转写生成字幕 |
+| 视频预览 | 内置播放器，下载完成后可直接预览 |
+| 历史管理 | 所有下载任务自动保存，支持查看、重试、删除 |
+| 深色/浅色模式 | 支持主题切换，适配不同使用环境 |
+| 抖音 Cookie 登录 | 内置浏览器登录流程，轻松获取抖音下载权限 |
 
-### 桌面版构建
+---
 
-构建顺序：**前端静态导出必须先于 electron-builder 打包**（`web/out/` 作为 extraResources 打入 app）。
+## 界面总览
 
-```bash
-cd web
-npm run build:desktop        # Next.js 静态导出 → web/out/
+软件界面分为两大区域：左侧为 **操作控制栏**，右侧为 **结果展示区**。
 
-cd ../desktop
-npm run dist:mac             # 构建后端二进制 + electron-builder → DMG
-```
+![界面总览 - 带有历史任务](docs/screenshots/02-home-with-tasks.png)
 
-`dist:mac` 内部执行：
-1. `build_backend.sh` — PyInstaller 将 FastAPI 后端打包为单文件二进制 `bilibili-douyin-backend`（约 75MB）
-2. `electron-builder --mac dmg` — 将 Electron 壳 + 前端静态资源 + 后端二进制 + douyin-downloader 打包为 DMG
+- **左侧控制栏**：包含链接输入框、下载选项、进度显示和状态信息
+- **右侧展示区**：显示当前任务的缩略图、字幕预览和操作按钮
+- **底部任务列表**：展示所有历史下载任务，支持分页浏览
 
-打包产物在 `desktop/dist/B站抖音下载器-0.1.0-arm64.dmg`。
+---
 
-**Windows 打包**：
+## 快速开始
 
-```bash
-cd desktop
-npm run dist:win
-```
+### 第一步：输入视频链接
 
-### 打包注意事项
+在左侧控制栏的文本框中，粘贴你要下载的视频链接。支持以下格式：
 
-**PyInstaller 隐藏导入**：`gmssl` 的子模块（`gmssl.func`、`gmssl.sm3`、`gmssl.sm2`、`gmssl.sm4`）不会被自动检测，漏掉任何一个会导致抖音 ABogus 签名在打包后静默失败（import 被 try/except 吞掉），表现为 `Empty 200 response (anti-bot)` 错误。必须在 `build_backend.sh` 和 `.spec` 文件中都显式声明。
+- **B站**：`https://www.bilibili.com/video/BVxxxxxxx` 或 B站分享文案
+- **抖音**：`https://www.douyin.com/video/xxxxxxx` 或抖音分享文案
+- **YouTube**：`https://www.youtube.com/watch?v=xxxxxxx`
 
-**打包 vs 开发模式**：`desktop/main.cjs` 通过 `app.isPackaged` 区分行为：
-- 开发模式：检查 `python3`、`desktop_entry.py`、`app/` 是否存在；使用 `python3 desktop_entry.py` 启动后端
-- 打包模式：检查 `bilibili-douyin-backend` 二进制和 `web/index.html` 是否存在；直接 spawn 二进制
+![输入视频链接](docs/screenshots/03-url-pasted.png)
 
-**启动超时**：PyInstaller 单文件二进制首次启动时会自解压到临时目录，可能耗时较久。打包模式下 `waitForBackend()` 超时为 60 秒（开发模式 20 秒）。如果超时后进程仍在运行，后续重启调用不会杀掉正在启动的进程，避免竞态循环。
+> **提示**：你也可以直接粘贴从手机复制的整段分享文案（如「#xxx 复制打开抖音...」），软件会自动识别其中的链接。
 
-**`douyin_adapter.py` 冻结模式**：通过 `getattr(sys, 'frozen', False)` 检测是否在 PyInstaller 环境中运行。冻结模式下使用 `sys.executable --helper` 调用子进程，而非 `python3 scripts/helper.py`。
+### 第二步：选择是否下载字幕
 
-**VSCode 终端问题**：VSCode 集成终端可能设置 `ELECTRON_RUN_AS_NODE=1`，导致 Electron 无法正常启动（报错 `Cannot read properties of undefined (reading 'handle')`）。开发时需先 `unset ELECTRON_RUN_AS_NODE` 或从外部终端启动。
+勾选「下载字幕（需额外处理时间）」选项后，软件会在下载视频的同时尝试获取或生成字幕：
 
-**entitlements**：macOS 打包需要 `desktop/entitlements.mac.plist`，启用 `com.apple.security.cs.allow-unsigned-executable-memory` 等权限，否则 PyInstaller 二进制可能被 Hardened Runtime 阻止。
+- **内嵌字幕**：优先提取视频已有的字幕轨
+- **自动转写**：若视频无字幕，将使用 AI 语音识别自动生成
 
-**douyin-downloader 目录**：打包时 `vendor/douyin-downloader/` 作为 extraResources 打入 app，排除 `.git/`、`.venv/`、`__pycache__/`、`*.pyc`。桌面版通过 `DOUYIN_DOWNLOADER_DIR` 环境变量指向该目录。
+### 第三步：点击「开始处理」
 
-### 桌面版运行约定
+点击按钮后，软件将自动开始解析和下载：
 
-- 桌面版固定使用 `QUEUE_MODE=inline`，后端运行在 `127.0.0.1:18180`
-- 窗口先展示 loading 页面，后端就绪后自动切换到主界面；若启动失败显示错误面板并可重试
-- 首次启动弹出目录选择对话框；后续启动直接使用已选目录
-- YouTube / 抖音 Cookie 优先从本机 Chrome 浏览器读取，配置文件存储在 `userData` 目录
-- 通过 Electron IPC 提供：下载目录选择、打开下载目录/日志目录、打开任务文件、导出诊断日志
-- 用户设置在 `~/Library/Application Support/bilibili-douyin-downloader-desktop/desktop-settings.json`
+![下载进行中](docs/screenshots/04-downloading.png)
 
-## 环境变量
+下载过程中可以实时看到：
+- 当前任务状态（解析元数据 → 下载视频 → 提取字幕）
+- 进度百分比
+- 字幕和视频的处理状态
 
-### `backend/.env`
+---
 
-```bash
-APP_ENV=development
-QUEUE_MODE=redis
-REDIS_URL=redis://localhost:6379/0
-TASKS_DIR=../tmp/tasks
-DOUYIN_COOKIE_FILE=../tmp/douyin.cookies.txt
-YOUTUBE_COOKIE_FILE=../tmp/youtube.cookies.txt
-YOUTUBE_COOKIES_BROWSER=chrome
-YOUTUBE_DOWNLOADER=yt-dlp
-DOUYIN_DOWNLOADER_DIR=/private/tmp/douyin-downloader
-DOUYIN_DOWNLOADER_PYTHON=/private/tmp/douyin-downloader/.venv/bin/python
-TASK_TTL_SECONDS=86400
-YTDLP_BIN=yt-dlp
-FFMPEG_BIN=ffmpeg
-WHISPER_MODEL=small
-WHISPER_DEVICE=cpu
-WHISPER_COMPUTE_TYPE=int8
-MAX_VIDEO_DURATION_SECONDS=3600
-```
+## 任务结果
 
-### `web/.env.local`
+### 下载成功
 
-```bash
-BACKEND_ORIGIN=http://localhost:8000
-NEXT_PUBLIC_ENABLE_COOKIE_INPUT=false
-```
+任务完成后，右侧展示区会显示视频封面缩略图，并提供以下操作：
 
-## 限制
+![任务完成详情](docs/screenshots/07-task-completed-detail.png)
 
-- B 站为稳定支持平台
-- YouTube 命中机器人校验时会优先读取本地浏览器 cookies 文件
-- 抖音为实验支持平台，当前优先走 `douyin-downloader`，并优先读取本机浏览器中的抖音登录态
-- 第一版不支持登录态、会员、私密内容
-- 默认不向普通用户展示 cookies 输入；本地调试可通过 `NEXT_PUBLIC_ENABLE_COOKIE_INPUT=true` 打开
-- 第一版不支持批量下载、合集下载、主页抓取
-- 模型首次转写时可能需要下载权重文件
+- **播放视频**：点击缩略图上的播放按钮，打开内置播放器
+- **下载视频**：将视频文件保存到本地（网页模式下可用）
+- **下载字幕**：将字幕文本保存为 `.txt` 文件
+- **复制字幕**：一键复制字幕内容到剪贴板
+
+#### 视频播放器
+
+点击缩略图上的播放按钮，即可在弹出的播放器中预览视频：
+
+![视频播放器](docs/screenshots/08-video-player.png)
+
+### 下载失败
+
+如果下载过程中遇到问题，界面会显示具体的错误信息，并提供「重试任务」按钮：
+
+![任务失败](docs/screenshots/06-task-failed.png)
+
+常见失败原因：
+- **ffmpeg 未安装**：视频合并需要 ffmpeg，请确保系统已安装
+- **Cookie 过期**：抖音视频需要有效的登录 Cookie，请重新登录
+- **网络问题**：检查网络连接是否正常
+- **链接无效**：确认视频链接是否正确
+
+---
+
+## 设置面板
+
+点击左上角的齿轮图标打开设置面板：
+
+![设置面板](docs/screenshots/09-settings-panel.png)
+
+### 下载目录
+
+在桌面客户端中，可以自定义视频的下载保存位置。点击「选择目录」按钮，在弹出的系统对话框中选择目标文件夹。
+
+### 浏览器配置
+
+软件需要读取浏览器 Cookie 来下载需要登录的视频（如抖音）。你可以选择：
+
+- **浏览器来源**：Chrome / Edge / Safari
+- **浏览器 Profile**：选择对应的浏览器配置文件（如 Default、Profile 1）
+
+### 抖音 Cookie 登录
+
+下载抖音视频需要有效的登录 Cookie。设置面板提供了一键登录功能：
+
+1. 点击「登录抖音」按钮，软件会在你的默认浏览器中打开抖音
+2. 在浏览器中完成抖音账号登录
+3. 回到软件，点击「已完成登录」按钮导入 Cookie
+4. 系统会显示获取到的 Cookie 数量，确认后即可下载抖音视频
+
+### 诊断信息
+
+设置面板底部展示了当前环境的诊断信息：
+
+- **抖音 Cookie 数量**：当前已获取的 Cookie 数
+- **浏览器配置**：正在使用的浏览器 Profile
+- **Cookie 来源**：Cookie 的读取方式
+- **抖音下载工具**：抖音下载器是否已安装就绪
+- **FFmpeg**：视频处理工具是否已安装
+
+---
+
+## 任务列表
+
+界面底部显示所有历史下载任务，每条记录包含：
+
+- 视频缩略图
+- 视频标题
+- 任务状态（已完成 / 任务失败 / 排队中 等）
+- 视频时长
+- 下载时间
+
+![任务列表](docs/screenshots/07-task-completed-detail.png)
+
+### 任务操作
+
+每个任务提供以下快捷操作：
+
+| 操作 | 说明 |
+|------|------|
+| 查看任务 | 在右侧展示区查看该任务的详细信息 |
+| 复制链接 | 复制视频原始链接到剪贴板 |
+| 终止 | 终止正在进行的任务 |
+| 删除 | 删除任务记录及其本地文件 |
+
+### 分页导航
+
+当任务数量较多时，任务列表自动分页，可通过底部的页码按钮切换页面。
+
+---
+
+## 主题切换
+
+软件支持深色和浅色两种主题模式。点击右上角的太阳/月亮图标即可切换：
+
+- **深色模式**（默认）：适合夜间使用，减少眼睛疲劳
+- **浅色模式**：适合白天使用，界面更明亮
+
+![浅色模式](docs/screenshots/10-light-theme.png)
+
+---
+
+## 支持的平台
+
+| 平台 | 状态 | 说明 |
+|------|------|------|
+| B站（Bilibili） | 稳定 | 通过 yt-dlp 直接下载 |
+| YouTube | 不稳定 | 通过 yt-dlp 下载，易触发机器人校验 |
+| 抖音（Douyin） | 实验性 | 需要登录获取 Cookie，通过外部工具下载 |
+
+---
+
+## 常见问题
+
+### Q：下载抖音视频提示 Cookie 失效怎么办？
+
+打开设置面板，点击「登录抖音」重新获取 Cookie。确保在浏览器中登录的是你常用的抖音账号。
+
+### Q：下载的视频无法播放？
+
+部分视频格式可能需要转码。如果界面上出现「转为兼容格式」按钮，点击即可自动转码。
+
+### Q：如何查看已下载的文件？
+
+- **桌面客户端**：点击任务操作中的「打开目录」按钮，直接打开文件所在文件夹
+- **网页模式**：点击「下载视频」/「下载字幕」链接保存文件
+
+### Q：下载速度慢怎么办？
+
+下载速度取决于你的网络环境和视频源服务器。建议在网络状况良好时使用。
+
+### Q：字幕生成失败怎么办？
+
+字幕生成依赖 AI 语音识别模型。如果生成失败，可以尝试：
+1. 重新提交任务并勾选「下载字幕」选项
+2. 如果视频本身有内嵌字幕，软件会优先提取内嵌字幕
