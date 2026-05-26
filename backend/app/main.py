@@ -8,7 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .config import settings
-from .downloader import get_desktop_diagnostics
+from .downloader import get_desktop_diagnostics, transcode_task_video, try_download_subtitles
+from .transcription import transcribe_media
 from .jobs import cancel_task, process_task
 from .models import CreateTaskRequest, CreateTaskResponse, SubtitleResponse, TaskRecord
 from .queue import get_queue
@@ -63,26 +64,35 @@ def submit_task(payload: CreateTaskRequest, allow_duplicate: bool = False) -> Cr
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if not allow_duplicate:
+    if payload.retry_task_id:
+        delete_task(payload.retry_task_id)
+        task_id = payload.retry_task_id
+    elif not allow_duplicate:
         existing = find_completed_task_by_url(source_url)
         if existing is not None:
             raise HTTPException(
                 status_code=409,
                 detail=existing.model_dump(mode="json"),
             )
-
-    task_id = uuid4().hex
-    create_task(task_id, source_url, cookies_supplied=bool(payload.cookies and payload.cookies.strip()))
+        task_id = uuid4().hex
+    else:
+        task_id = uuid4().hex
+    create_task(
+        task_id,
+        source_url,
+        cookies_supplied=bool(payload.cookies and payload.cookies.strip()),
+        subtitle_enabled=payload.download_subtitles,
+    )
     if settings.queue_mode == "inline":
         thread = threading.Thread(
             target=process_task,
-            args=(task_id, source_url, payload.cookies),
+            args=(task_id, source_url, payload.cookies, payload.download_subtitles),
             daemon=True,
         )
         thread.start()
     else:
         queue = get_queue()
-        queue.enqueue(process_task, task_id, source_url, payload.cookies, job_id=task_id)
+        queue.enqueue(process_task, task_id, source_url, payload.cookies, payload.download_subtitles, job_id=task_id)
     return CreateTaskResponse(task_id=task_id)
 
 
@@ -135,11 +145,14 @@ def get_subtitle(task_id: str) -> SubtitleResponse:
     task = get_existing_task(task_id)
     if not task.subtitle_ready or not task.subtitle_txt_filename:
         raise HTTPException(status_code=404, detail="Subtitle not ready")
+    txt_path = get_task_dir(task_id) / task.subtitle_txt_filename
+    if not txt_path.exists():
+        raise HTTPException(status_code=404, detail="Subtitle file missing")
     return SubtitleResponse(
         task_id=task_id,
         source=task.subtitle_source,
         format="txt",
-        content=read_text_file(task_id, task.subtitle_txt_filename),
+        content=txt_path.read_text(encoding="utf-8"),
     )
 
 
@@ -150,6 +163,69 @@ def download_video(task_id: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Video not ready")
     path = get_task_dir(task_id) / task.video_filename
     return guarded_file_response(path, task.video_filename, "video/mp4")
+
+
+@app.post("/api/tasks/{task_id}/generate-subtitle")
+def generate_subtitle(task_id: str):
+    task = get_existing_task(task_id)
+    if not task.video_ready or not task.video_filename:
+        raise HTTPException(status_code=400, detail="视频尚未下载完成")
+    if task.subtitle_ready:
+        return {"status": "already_ready"}
+
+    task_dir = get_task_dir(task_id)
+    video_path = task_dir / task.video_filename
+    srt_path = task_dir / "subtitle.srt"
+    txt_path = task_dir / "subtitle.txt"
+
+    update_task(task_id, progress=5, status_message="正在提取现成字幕", status="extracting_subtitle")
+    try:
+        subtitles_found, subtitle_source = try_download_subtitles(task.source_url, task_dir)
+    except Exception:
+        subtitles_found, subtitle_source = False, "none"
+    if not subtitles_found:
+        update_task(task_id, progress=25, status_message="开始语音转写", status="transcribing")
+        transcribe_media(
+            video_path,
+            srt_path,
+            txt_path,
+            duration_seconds=task.duration_seconds,
+            progress_callback=lambda p, msg: update_task(task_id, progress=p, status_message=msg),
+        )
+        subtitle_source = "asr"
+
+    update_task(
+        task_id,
+        status="completed",
+        progress=100,
+        status_message="视频和字幕处理完成",
+        subtitle_enabled=True,
+        subtitle_source=subtitle_source,
+        subtitle_ready=srt_path.exists() and txt_path.exists(),
+        subtitle_srt_filename=srt_path.name if srt_path.exists() else None,
+        subtitle_txt_filename=txt_path.name if txt_path.exists() else None,
+    )
+    return {"status": "generated", "subtitle_source": subtitle_source}
+
+
+@app.post("/api/tasks/{task_id}/transcode")
+def transcode_video(task_id: str):
+    task = get_existing_task(task_id)
+    if not task.video_ready:
+        raise HTTPException(status_code=400, detail="视频尚未下载完成")
+    if not task.video_needs_transcode:
+        return {"status": "already_compatible"}
+
+    task_dir = get_task_dir(task_id)
+    update_task(task_id, progress=90, status_message="正在转码为兼容播放格式")
+    try:
+        transcode_task_video(task_dir)
+    except Exception as exc:
+        update_task(task_id, progress=100, status_message="转码失败", error_message=str(exc))
+        raise HTTPException(status_code=500, detail=f"转码失败: {exc}")
+
+    update_task(task_id, progress=100, status_message="视频和字幕处理完成", video_needs_transcode=False)
+    return {"status": "transcoded"}
 
 
 @app.get("/api/tasks/{task_id}/thumbnail")

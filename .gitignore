@@ -16,3 +16,4 @@ backend/.venv
 *.DS_Store
 .venv
 .playwright-mcp
+backend/playwright-browsers

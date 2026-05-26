@@ -35,11 +35,12 @@ def load_task(task_id: str) -> TaskRecord | None:
     return TaskRecord.model_validate_json(meta_path.read_text(encoding="utf-8"))
 
 
-def create_task(task_id: str, source_url: str, cookies_supplied: bool = False) -> TaskRecord:
+def create_task(task_id: str, source_url: str, cookies_supplied: bool = False, subtitle_enabled: bool = True) -> TaskRecord:
     record = TaskRecord(
         task_id=task_id,
         source_url=source_url,
         cookies_supplied=cookies_supplied,
+        subtitle_enabled=subtitle_enabled,
         status="queued",
         progress=0,
         status_message="任务已创建，等待处理",

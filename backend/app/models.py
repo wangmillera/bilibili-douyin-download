@@ -21,6 +21,8 @@ SubtitleSource = Literal["embedded", "automatic", "asr", "none"]
 class CreateTaskRequest(BaseModel):
     url: HttpUrl | str
     cookies: str | None = None
+    download_subtitles: bool = False
+    retry_task_id: str | None = None
 
 
 class TaskRecord(BaseModel):
@@ -35,9 +37,11 @@ class TaskRecord(BaseModel):
     status: TaskState = "queued"
     progress: float = 0
     status_message: str = "等待提交"
+    subtitle_enabled: bool = True
     subtitle_source: SubtitleSource = "none"
     subtitle_ready: bool = False
     video_ready: bool = False
+    video_needs_transcode: bool = False
     error_code: str | None = None
     error_message: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

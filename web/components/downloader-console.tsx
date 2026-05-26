@@ -40,9 +40,11 @@ type TaskRecord = {
   status: TaskStatus;
   progress: number;
   status_message: string;
+  subtitle_enabled: boolean;
   subtitle_source: "embedded" | "automatic" | "asr" | "none";
   subtitle_ready: boolean;
   video_ready: boolean;
+  video_needs_transcode: boolean;
   error_code: string | null;
   error_message: string | null;
   created_at: string;
@@ -114,6 +116,9 @@ export function DownloaderConsole() {
   const [douyinLoginActive, setDouyinLoginActive] = useState(false);
   const [douyinLoginLoading, setDouyinLoginLoading] = useState(false);
   const [douyinCookieCount, setDouyinCookieCount] = useState<number | null>(null);
+  const [downloadSubtitles, setDownloadSubtitles] = useState(false);
+  const [transcoding, setTranscoding] = useState(false);
+  const [generatingSubtitles, setGeneratingSubtitles] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; resolve: (value: boolean) => void } | null>(null);
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -305,7 +310,7 @@ export function DownloaderConsole() {
       .then((payload: SubtitleResponse) => setSubtitle(payload))
       .catch((reason: Error) => {
         if (reason.name !== "AbortError") {
-          setError(reason.message);
+          setSubtitle(null);
         }
       });
   }, [runtime.backendOrigin, task?.subtitle_ready, task?.task_id]);
@@ -371,7 +376,7 @@ export function DownloaderConsole() {
       let response = await fetch(apiUrl("/api/tasks"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, download_subtitles: downloadSubtitles }),
       });
 
       if (response.status === 409) {
@@ -386,7 +391,7 @@ export function DownloaderConsole() {
         response = await fetch(apiUrl("/api/tasks?allow_duplicate=true"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, download_subtitles: downloadSubtitles }),
         });
       }
 
@@ -409,6 +414,54 @@ export function DownloaderConsole() {
       setError(reason instanceof Error ? reason.message : "提交失败");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function transcodeVideo() {
+    if (!task) return;
+    setTranscoding(true);
+    try {
+      const response = await fetch(apiUrl(`/api/tasks/${task.task_id}/transcode`), { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({ detail: "转码失败" }));
+        throw new Error(payload.detail || "转码失败");
+      }
+      const result: { status: string } = await response.json();
+      if (result.status === "transcoded") {
+        setTask((prev) => (prev ? { ...prev, video_needs_transcode: false, status_message: "视频和字幕处理完成" } : prev));
+        showToast("转码完成，视频已兼容播放格式");
+        refreshRecentTasks().catch(() => undefined);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "转码失败");
+    } finally {
+      setTranscoding(false);
+    }
+  }
+
+  async function generateSubtitle() {
+    if (!task) return;
+    setGeneratingSubtitles(true);
+    setError(null);
+    try {
+      const response = await fetch(apiUrl(`/api/tasks/${task.task_id}/generate-subtitle`), { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({ detail: "生成失败" }));
+        throw new Error(payload.detail || "生成失败");
+      }
+      // Re-fetch task to get updated subtitle info
+      const taskResponse = await fetch(apiUrl(`/api/tasks/${task.task_id}`), { cache: "no-store" });
+      if (taskResponse.ok) {
+        const updatedTask: TaskRecord = await taskResponse.json();
+        setTask(updatedTask);
+        setSelectedTaskId(updatedTask.task_id);
+      }
+      showToast("字幕已生成");
+      refreshRecentTasks().catch(() => undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "字幕生成失败");
+    } finally {
+      setGeneratingSubtitles(false);
     }
   }
 
@@ -550,6 +603,19 @@ export function DownloaderConsole() {
       return null;
     }
 
+    if (task.video_needs_transcode) {
+      return (
+        <button
+          className="tool-button ghost"
+          type="button"
+          onClick={transcodeVideo}
+          disabled={transcoding}
+        >
+          {transcoding ? "转码中..." : "转为兼容格式"}
+        </button>
+      );
+    }
+
     if (runningInDesktop) {
       return null;
     }
@@ -595,9 +661,27 @@ export function DownloaderConsole() {
       {backendLoading ? (
         <section className="backend-loading-panel">
           <div className="backend-loading-content">
-            <div className="loading-spinner" />
-            <h2>正在启动本地服务</h2>
-            <p className="backend-loading-hint">后端服务启动中，请稍候...</p>
+            <div className="loading-spinner-shell">
+              <div className="loading-ripple" />
+              <div className="loading-ripple loading-ripple-2" />
+              <div className="loading-ripple loading-ripple-3" />
+              <div className="loading-spinner">
+                <svg className="loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </div>
+            </div>
+            <h2 className="loading-title">
+              正在启动本地服务
+              <span className="loading-dots">
+                <span className="loading-dot">.</span>
+                <span className="loading-dot">.</span>
+                <span className="loading-dot">.</span>
+              </span>
+            </h2>
+            <p className="backend-loading-hint">后端服务启动中，请稍候</p>
           </div>
         </section>
       ) : runningInDesktop && !runtime.backendHealthy && runtime.backendLaunchError ? (
@@ -871,6 +955,14 @@ export function DownloaderConsole() {
                 placeholder="粘贴 B 站、抖音、YouTube 链接，或抖音 / B 站整段分享文案"
                 required
               />
+              <label className="subtitle-checkbox">
+                <input
+                  type="checkbox"
+                  checked={downloadSubtitles}
+                  onChange={(event) => setDownloadSubtitles(event.target.checked)}
+                />
+                <span>下载字幕（需额外处理时间）</span>
+              </label>
               <div className="form-actions">
                 <button className="tool-button primary wide" type="submit" disabled={submitting || !url.trim() || (!!task && !isTerminalState)}>
                   {submitting ? "任务提交中..." : !url.trim() ? "请输入链接" : !!task && !isTerminalState ? "正在处理中..." : "开始处理"}
@@ -890,6 +982,7 @@ export function DownloaderConsole() {
                     type="button"
                     onClick={async () => {
                       const retryUrl = task.source_url;
+                      const retryTaskId = task.task_id;
                       setUrl(retryUrl);
                       setSubmitting(true);
                       setError(null);
@@ -899,10 +992,10 @@ export function DownloaderConsole() {
                       setToastMessage(null);
                       setPlayerOpen(false);
                       try {
-                        const response = await fetch(apiUrl("/api/tasks?allow_duplicate=true"), {
+                        const response = await fetch(apiUrl("/api/tasks"), {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ url: retryUrl }),
+                          body: JSON.stringify({ url: retryUrl, download_subtitles: downloadSubtitles, retry_task_id: retryTaskId }),
                         });
                         if (!response.ok) {
                           const payload = await response.json().catch(() => ({ detail: "重试失败" }));
@@ -1040,11 +1133,6 @@ export function DownloaderConsole() {
                       打开视频目录
                     </button>
                   ) : null}
-                  {subtitle?.content ? (
-                    <button className="tool-button ghost" type="button" onClick={copySubtitle}>
-                      复制字幕
-                    </button>
-                  ) : null}
                 </div>
               </div>
 
@@ -1062,9 +1150,31 @@ export function DownloaderConsole() {
                 ) : null}
 
                 <details key={task?.task_id} className="subtitle-preview" open>
-                  <summary>字幕预览</summary>
+                  <summary className="subtitle-summary">
+                    <span>字幕预览</span>
+                    {subtitle?.content ? (
+                      <button className="subtitle-copy-btn" type="button" onClick={copySubtitle} title="复制字幕">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      </button>
+                    ) : null}
+                  </summary>
                   {subtitle?.content ? (
                     <pre>{subtitle.content}</pre>
+                  ) : task?.status === "completed" && !task?.subtitle_enabled && !subtitle?.content ? (
+                    <div className="subtitle-placeholder">
+                      <p>本次下载未启用手幕</p>
+                      <button
+                        className="tool-button ghost"
+                        type="button"
+                        onClick={generateSubtitle}
+                        disabled={generatingSubtitles}
+                      >
+                        {generatingSubtitles ? "生成中..." : "生成字幕"}
+                      </button>
+                    </div>
                   ) : (
                     <div className="subtitle-placeholder">暂无字幕</div>
                   )}

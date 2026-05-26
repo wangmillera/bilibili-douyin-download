@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
-from .downloader import download_thumbnail, download_video, probe_video, try_download_subtitles
+from .downloader import check_video_compatibility, download_thumbnail, download_video, probe_video, try_download_subtitles
 from .douyin_adapter import download_douyin_video, is_douyin_url, probe_douyin_video
 from .task_store import get_task_dir, update_task
 from .transcription import transcribe_media
@@ -30,7 +30,7 @@ def detect_platform(info: dict[str, Any]) -> str:
     return str(extractor)
 
 
-def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
+def process_task(task_id: str, url: str, cookies: str | None = None, download_subtitles: bool = True) -> None:
     task_dir = get_task_dir(task_id)
     cancel_event = threading.Event()
     _cancel_events[task_id] = cancel_event
@@ -79,16 +79,19 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
 
         subtitles_found = False
         subtitle_source = "none"
-        if uses_douyin_downloader:
-            set_progress(25, "抖音链路已切换到 douyin-downloader，跳过现成字幕提取", status="extracting_subtitle")
-            set_progress(45, "准备自动转写抖音视频")
-        else:
-            set_progress(25, "正在提取现成字幕", status="extracting_subtitle")
-            subtitles_found, subtitle_source = try_download_subtitles(url, task_dir, cookies)
-            if subtitles_found:
-                set_progress(45, "现成字幕提取完成")
+        if download_subtitles:
+            if uses_douyin_downloader:
+                set_progress(25, "抖音链路已切换到 douyin-downloader，跳过现成字幕提取", status="extracting_subtitle")
+                set_progress(45, "准备自动转写抖音视频")
             else:
-                set_progress(45, "未找到现成字幕，准备自动转写")
+                set_progress(25, "正在提取现成字幕", status="extracting_subtitle")
+                subtitles_found, subtitle_source = try_download_subtitles(url, task_dir, cookies)
+                if subtitles_found:
+                    set_progress(45, "现成字幕提取完成")
+                else:
+                    set_progress(45, "未找到现成字幕，准备自动转写")
+        else:
+            set_progress(25, "已跳过字幕下载", status="downloading_video")
 
         set_progress(55, "开始下载视频", status="downloading_video")
         if _is_cancelled(task_id):
@@ -103,7 +106,7 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
         subtitle_srt_path = task_dir / "subtitle.srt"
         subtitle_txt_path = task_dir / "subtitle.txt"
 
-        if not subtitles_found:
+        if download_subtitles and not subtitles_found:
             set_progress(55, "开始语音转写", status="transcribing")
             if _is_cancelled(task_id):
                 raise CancelledError("任务已被用户终止")
@@ -116,14 +119,19 @@ def process_task(task_id: str, url: str, cookies: str | None = None) -> None:
             )
             subtitle_source = "asr"
 
+        needs_transcode = (
+            video_path.exists() and not check_video_compatibility(video_path)
+        )
+
         update_task(
             task_id,
             status="completed",
             progress=100,
-            status_message="视频和字幕处理完成",
+            status_message="视频和字幕处理完成" if download_subtitles else "视频处理完成",
             subtitle_source=subtitle_source,
             subtitle_ready=subtitle_srt_path.exists() and subtitle_txt_path.exists(),
             video_ready=video_path.exists(),
+            video_needs_transcode=needs_transcode,
             video_filename=video_path.name,
             subtitle_srt_filename=subtitle_srt_path.name if subtitle_srt_path.exists() else None,
             subtitle_txt_filename=subtitle_txt_path.name if subtitle_txt_path.exists() else None,

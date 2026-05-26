@@ -180,7 +180,7 @@ def download_video(url: str, task_dir: Path, progress_callback=None, cookies: st
             return
         if event.get("status") != "downloading":
             if event.get("status") == "finished":
-                progress_callback(90, "视频下载完成，准备转码兼容格式")
+                progress_callback(90, "视频下载完成")
             return
         total = event.get("total_bytes") or event.get("total_bytes_estimate") or 0
         downloaded = event.get("downloaded_bytes") or 0
@@ -239,7 +239,7 @@ def download_youtube_video_with_legacy_downloader(
             return
         if event.get("status") != "downloading":
             if event.get("status") == "finished":
-                progress_callback(90, "YouTube 视频下载完成，准备转码兼容格式")
+                progress_callback(90, "YouTube 视频下载完成")
             return
         total = event.get("total_bytes") or event.get("total_bytes_estimate") or 0
         downloaded = event.get("downloaded_bytes") or 0
@@ -315,14 +315,24 @@ def _is_compatible_mp4(probe: dict) -> bool:
     return video_ok and audio_ok
 
 
-def transcode_video_for_playback(source_path: Path, target_path: Path, progress_callback=None) -> None:
-    probe = _probe_video(source_path)
-    if probe and _is_compatible_mp4(probe):
-        if progress_callback:
-            progress_callback(95, "视频格式已兼容，跳过转码")
-        if source_path != target_path:
-            shutil.copy2(source_path, target_path)
-        return
+def check_video_compatibility(video_path: Path) -> bool:
+    """Return True if the video at `video_path` is already a browser-playable H.264 MP4."""
+    probe = _probe_video(video_path)
+    return probe is not None and _is_compatible_mp4(probe)
+
+
+def transcode_task_video(task_dir: Path, progress_callback=None) -> Path | None:
+    """Find the source video in task_dir and transcode it to video.mp4."""
+    for extension in (".mp4", ".mkv", ".webm", ".mov"):
+        source = task_dir / f"source-video{extension}"
+        if source.exists():
+            break
+    else:
+        source = task_dir / "video.mp4"
+        if not source.exists():
+            return None
+
+    target = task_dir / "video.mp4"
 
     if progress_callback:
         progress_callback(92, "正在转码为兼容播放格式")
@@ -332,7 +342,7 @@ def transcode_video_for_playback(source_path: Path, target_path: Path, progress_
             settings.ffmpeg_bin,
             "-y",
             "-i",
-            str(source_path),
+            str(source),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -345,7 +355,7 @@ def transcode_video_for_playback(source_path: Path, target_path: Path, progress_
             "aac",
             "-b:a",
             "192k",
-            str(target_path),
+            str(target),
         ],
         check=True,
         capture_output=True,
@@ -354,6 +364,16 @@ def transcode_video_for_playback(source_path: Path, target_path: Path, progress_
 
     if progress_callback:
         progress_callback(98, "兼容播放格式已生成")
+
+    return target
+
+
+def transcode_video_for_playback(source_path: Path, target_path: Path, progress_callback=None) -> None:
+    """Simply rename/copy the source video to the target path. No automatic transcoding."""
+    if progress_callback:
+        progress_callback(95, "视频文件已保存")
+    if source_path != target_path:
+        shutil.copy2(source_path, target_path)
 
 
 def download_thumbnail(thumbnail_url: str, task_dir: Path) -> Path | None:
