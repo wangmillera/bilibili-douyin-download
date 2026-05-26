@@ -7,10 +7,15 @@ __pycache__
 .pytest_cache
 .venv
 dist
-build
+/build
 tmp/tasks/*
 !tmp/tasks/.gitkeep
+tmp/**/douyin-helper.cookies.txt
+tmp/douyin.cookies.json
+tmp/test-youtube-cookies/
 backend/.venv
+backend/.env
+web/.env.local
 *.pyc
 *.pyo
 *.DS_Store

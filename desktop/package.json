@@ -1,6 +1,8 @@
 {
   "name": "bilibili-douyin-downloader-desktop",
   "version": "0.1.0",
+  "description": "B站抖音下载器 - 本地视频下载与字幕提取工具",
+  "author": "Miller",
   "private": true,
   "main": "main.cjs",
   "scripts": {
