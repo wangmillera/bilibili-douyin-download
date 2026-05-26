@@ -130,10 +130,12 @@ function resolvePythonExecutable() {
 function checkCriticalResources() {
   const root = backendRoot();
   const missing = [];
+  const isWin = process.platform === "win32";
 
   if (app.isPackaged) {
+    const backendName = isWin ? "bilibili-douyin-backend.exe" : "bilibili-douyin-backend";
     const checks = [
-      { label: "后端二进制", path: path.join(root, "bilibili-douyin-backend") },
+      { label: "后端二进制", path: path.join(root, backendName) },
       { label: "前端页面 web/index.html", path: path.join(process.resourcesPath, "web", "index.html") },
     ];
     for (const check of checks) {
@@ -238,7 +240,7 @@ async function startBackend(currentSettings) {
   const stderrLog = fs.openSync(path.join(logsDir, "desktop-backend.stderr.log"), "a");
 
   if (app.isPackaged) {
-    const backendBin = path.join(root, "bilibili-douyin-backend");
+    const backendBin = path.join(root, process.platform === "win32" ? "bilibili-douyin-backend.exe" : "bilibili-douyin-backend");
     backendProcess = spawn(backendBin, [], {
       cwd: root,
       env: backendEnv(currentSettings),

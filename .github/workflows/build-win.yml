@@ -73,7 +73,7 @@ jobs:
             --noconfirm `
             run_backend.py
           if (Test-Path dist\bilibili-douyin-backend.exe) {
-            Rename-Item dist\bilibili-douyin-backend.exe bilibili-douyin-backend
+            echo "Backend binary built successfully"
           }
         working-directory: backend
 

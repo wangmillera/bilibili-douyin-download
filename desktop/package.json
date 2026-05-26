@@ -55,8 +55,8 @@
         "to": "web"
       },
       {
-        "from": "../backend/dist/bilibili-douyin-backend",
-        "to": "backend/bilibili-douyin-backend"
+        "from": "../backend/dist/bilibili-douyin-backend*",
+        "to": "backend/"
       }
     ],
     "mac": {
