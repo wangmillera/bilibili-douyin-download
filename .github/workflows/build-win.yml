@@ -1,0 +1,111 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install --upgrade pip
+          .venv\Scripts\pip install -r requirements.txt
+          .venv\Scripts\pip install pyinstaller
+        working-directory: backend
+
+      - name: Build backend binary
+        run: |
+          .venv\Scripts\pyinstaller --onefile `
+            --name bilibili-douyin-backend `
+            --add-data "scripts;scripts" `
+            --hidden-import=uvicorn `
+            --hidden-import=uvicorn.logging `
+            --hidden-import=uvicorn.loops `
+            --hidden-import=uvicorn.loops.auto `
+            --hidden-import=uvicorn.protocols `
+            --hidden-import=uvicorn.protocols.http `
+            --hidden-import=uvicorn.protocols.http.auto `
+            --hidden-import=uvicorn.protocols.websockets `
+            --hidden-import=uvicorn.protocols.websockets.auto `
+            --hidden-import=uvicorn.lifespan `
+            --hidden-import=uvicorn.lifespan.on `
+            --hidden-import=yt_dlp `
+            --hidden-import=yt_dlp.utils `
+            --hidden-import=yt_dlp.extractor `
+            --hidden-import=aiohttp `
+            --hidden-import=aiofiles `
+            --hidden-import=aiosqlite `
+            --hidden-import=gmssl `
+            --hidden-import=gmssl.func `
+            --hidden-import=gmssl.sm3 `
+            --hidden-import=gmssl.sm2 `
+            --hidden-import=gmssl.sm4 `
+            --hidden-import=pydantic `
+            --hidden-import=fastapi `
+            --hidden-import=redis `
+            --hidden-import=rq `
+            --hidden-import=requests `
+            --hidden-import=opencc `
+            --hidden-import=browser_cookie3 `
+            --hidden-import=faster_whisper `
+            --collect-data faster_whisper `
+            --noupx `
+            --noconfirm `
+            run_backend.py
+          if (Test-Path dist\bilibili-douyin-backend.exe) {
+            Rename-Item dist\bilibili-douyin-backend.exe bilibili-douyin-backend
+          }
+        working-directory: backend
+
+      - name: Download Windows ffmpeg
+        run: |
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath .
+          $ffmpegDir = Get-ChildItem -Directory -Filter "ffmpeg-*" | Select-Object -First 1
+          Copy-Item "$($ffmpegDir.Name)\bin\ffmpeg.exe" bin\ffmpeg.exe
+          Copy-Item "$($ffmpegDir.Name)\bin\ffprobe.exe" bin\ffprobe.exe
+          Remove-Item ffmpeg.zip
+          Remove-Item $ffmpegDir.Name -Recurse -Force
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build frontend
+        run: npm run build:desktop
+        working-directory: web
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: desktop
+
+      - name: Build Electron installer
+        run: npx electron-builder --win nsis
+        working-directory: desktop
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: B站抖音下载器-win64
+          path: desktop/dist/*.exe
+          if-no-files-found: error

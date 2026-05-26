@@ -74,9 +74,10 @@ function douyinDownloaderPython() {
 }
 
 function resolveFfmpegBinary() {
+  const isWin = process.platform === "win32";
   const candidates = [
-    path.join(process.resourcesPath, "bin", "ffmpeg"),
-    path.join(__dirname, "..", "bin", "ffmpeg"),
+    path.join(process.resourcesPath, "bin", isWin ? "ffmpeg.exe" : "ffmpeg"),
+    path.join(__dirname, "..", "bin", isWin ? "ffmpeg.exe" : "ffmpeg"),
     "/opt/homebrew/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
     "/usr/bin/ffmpeg",
@@ -88,13 +89,14 @@ function resolveFfmpegBinary() {
     }
   }
 
-  return process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  return isWin ? "ffmpeg.exe" : "ffmpeg";
 }
 
 function resolveFfprobeBinary() {
+  const isWin = process.platform === "win32";
   const candidates = [
-    path.join(process.resourcesPath, "bin", "ffprobe"),
-    path.join(__dirname, "..", "bin", "ffprobe"),
+    path.join(process.resourcesPath, "bin", isWin ? "ffprobe.exe" : "ffprobe"),
+    path.join(__dirname, "..", "bin", isWin ? "ffprobe.exe" : "ffprobe"),
     "/opt/homebrew/bin/ffprobe",
     "/usr/local/bin/ffprobe",
     "/usr/bin/ffprobe",
@@ -106,7 +108,7 @@ function resolveFfprobeBinary() {
     }
   }
 
-  return process.platform === "win32" ? "ffprobe.exe" : "ffprobe";
+  return isWin ? "ffprobe.exe" : "ffprobe";
 }
 
 function resolvePythonExecutable() {
