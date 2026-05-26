@@ -7,10 +7,10 @@
     "dev": "electron .",
     "dev:full": "concurrently -k \"npm --prefix ../web run dev\" \"wait-on tcp:3000 && electron .\"",
     "build:renderer": "npm --prefix ../web run build:desktop",
-    "build:backend": "bash ../scripts/make-venv-relocatable.sh",
+    "build:backend": "bash ../backend/build_backend.sh",
     "pack": "npm run build:renderer && npm run build:backend && electron-builder --dir",
-    "dist:mac": "npm run build:renderer && npm run build:backend && electron-builder --mac dmg",
-    "dist:win": "npm run build:renderer && npm run build:backend && electron-builder --win nsis"
+    "dist:mac": "npm run build:backend && electron-builder --mac dmg",
+    "dist:win": "npm run build:backend && electron-builder --win nsis"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
@@ -53,18 +53,8 @@
         "to": "web"
       },
       {
-        "from": "../backend",
-        "to": "backend",
-        "filter": [
-          "app/**",
-          "desktop_entry.py",
-          "requirements.txt",
-          "scripts/**"
-        ]
-      },
-      {
-        "from": "../backend/.venv",
-        "to": "backend/.venv"
+        "from": "../backend/dist/bilibili-douyin-backend",
+        "to": "backend/bilibili-douyin-backend"
       }
     ],
     "mac": {

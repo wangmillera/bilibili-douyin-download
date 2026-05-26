@@ -133,8 +133,11 @@ function checkCriticalResources() {
     { label: "Python 可执行文件", path: resolvePythonExecutable() },
     { label: "入口文件 desktop_entry.py", path: path.join(root, "desktop_entry.py") },
     { label: "后端应用 app/", path: path.join(root, "app") },
-    { label: "前端页面 web/index.html", path: path.join(process.resourcesPath, "web", "index.html") },
   ];
+
+  if (app.isPackaged) {
+    checks.push({ label: "前端页面 web/index.html", path: path.join(process.resourcesPath, "web", "index.html") });
+  }
 
   for (const check of checks) {
     if (!fs.existsSync(check.path)) {

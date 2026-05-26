@@ -1,0 +1,1 @@
+const e = require("electron"); console.log("electron type:", typeof e); console.log("ipcMain:", typeof e.ipcMain); if (e.ipcMain) { e.app.whenReady().then(() => { console.log("READY"); e.app.quit(); }); }
