@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import mimetypes
 import os
+import json
 import shutil
 import subprocess
 
@@ -273,7 +274,56 @@ def download_youtube_video_with_legacy_downloader(
     raise FileNotFoundError("Video file was not created")
 
 
+def _probe_video(path: Path) -> dict | None:
+    """Return ffprobe stream info dict or None on failure."""
+    result = subprocess.run(
+        [
+            settings.ffprobe_bin,
+            "-v", "quiet",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _is_compatible_mp4(probe: dict) -> bool:
+    """Check whether the probed video is already H.264 + AAC in MP4 with yuv420p."""
+    fmt = probe.get("format", {})
+    if fmt.get("format_name", "").split(",")[0] != "mp4":
+        return False
+
+    video_ok = False
+    audio_ok = False
+    for stream in probe.get("streams", []):
+        codec = stream.get("codec_name", "")
+        if stream["codec_type"] == "video":
+            if codec == "h264" and stream.get("pix_fmt") in ("yuv420p", None):
+                video_ok = True
+        elif stream["codec_type"] == "audio":
+            if codec == "aac":
+                audio_ok = True
+    return video_ok and audio_ok
+
+
 def transcode_video_for_playback(source_path: Path, target_path: Path, progress_callback=None) -> None:
+    probe = _probe_video(source_path)
+    if probe and _is_compatible_mp4(probe):
+        if progress_callback:
+            progress_callback(95, "视频格式已兼容，跳过转码")
+        if source_path != target_path:
+            shutil.copy2(source_path, target_path)
+        return
+
     if progress_callback:
         progress_callback(92, "正在转码为兼容播放格式")
 

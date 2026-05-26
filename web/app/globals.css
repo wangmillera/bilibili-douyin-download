@@ -1047,14 +1047,13 @@ select {
 }
 
 .backend-loading-panel {
-  margin-bottom: 18px;
-  padding: 48px 24px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--panel-strong);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
   justify-content: center;
   align-items: center;
+  background: var(--bg);
 }
 
 .backend-loading-content {

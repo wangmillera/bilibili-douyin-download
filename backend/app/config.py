@@ -27,6 +27,7 @@ class Settings:
     task_ttl_seconds: int = int(os.getenv("TASK_TTL_SECONDS", "86400"))
     ytdlp_bin: str = os.getenv("YTDLP_BIN", "yt-dlp")
     ffmpeg_bin: str = os.getenv("FFMPEG_BIN", "ffmpeg")
+    ffprobe_bin: str = os.getenv("FFPROBE_BIN", "ffprobe")
     whisper_model: str = os.getenv("WHISPER_MODEL", "small")
     whisper_device: str = os.getenv("WHISPER_DEVICE", "cpu")
     whisper_compute_type: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
