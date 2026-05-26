@@ -80,12 +80,14 @@ function formatDuration(durationSeconds: number | null): string {
 }
 
 function formatCreatedAt(value: string): string {
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return "--";
   return new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function DownloaderConsole() {
@@ -327,7 +329,7 @@ export function DownloaderConsole() {
       });
 
       if (response.status === 409) {
-        const dupTask: TaskRecord = await response.json();
+        const { detail: dupTask } = await response.json();
         const confirmed = await showConfirm(
           `该链接已成功下载过：\n\n「${dupTask.title ?? "未命名任务"}」\n\n下载时间：${formatCreatedAt(dupTask.created_at)}\n\n是否仍然重新下载？`
         );

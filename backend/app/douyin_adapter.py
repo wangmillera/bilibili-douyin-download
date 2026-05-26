@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from datetime import datetime
@@ -15,6 +16,8 @@ from .config import settings
 from .downloader import resolve_cookie_header, transcode_video_for_playback
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+_IS_FROZEN = getattr(sys, "frozen", False)
 
 
 def append_log(name: str, message: str) -> None:
@@ -122,7 +125,43 @@ def normalize_douyin_url(url: str) -> str:
     return url
 
 
+def _run_helper_frozen(action: str, url: str, task_dir: Path, cookie_header: str | None) -> dict:
+    cookie_path = task_dir / "douyin-helper.cookies.txt"
+    if cookie_header:
+        cookie_path.write_text(cookie_header + "\n", encoding="utf-8")
+    else:
+        cookie_path.write_text("", encoding="utf-8")
+
+    repo_dir = str(settings.douyin_downloader_dir)
+    binary_path = sys.executable
+    command = [
+        binary_path,
+        "--helper",
+        "--action", action,
+        "--repo-dir", repo_dir,
+        "--url", normalize_douyin_url(url),
+        "--cookie-file", str(cookie_path),
+    ]
+    append_log("douyin-helper.log", f"command={' '.join(command)}")
+    env = os.environ.copy()
+    env["DOUYIN_DOWNLOADER_DIR"] = repo_dir
+    result = subprocess.run(command, capture_output=True, text=True, check=False, env=env)
+    append_log("douyin-helper.log", f"returncode={result.returncode}")
+    if result.stderr.strip():
+        append_log("douyin-helper.log", f"stderr={result.stderr.strip()}")
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip() or "douyin-downloader helper failed"
+        raise RuntimeError(message)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid douyin-downloader helper output: {result.stdout}") from exc
+
+
 def _run_helper(action: str, url: str, task_dir: Path, cookie_header: str | None) -> dict:
+    if _IS_FROZEN:
+        return _run_helper_frozen(action, url, task_dir, cookie_header)
+
     repo_dir = settings.douyin_downloader_dir
     helper_python = settings.douyin_downloader_python
     task_dir.mkdir(parents=True, exist_ok=True)

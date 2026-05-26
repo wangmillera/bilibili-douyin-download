@@ -129,19 +129,26 @@ function checkCriticalResources() {
   const root = backendRoot();
   const missing = [];
 
-  const checks = [
-    { label: "Python 可执行文件", path: resolvePythonExecutable() },
-    { label: "入口文件 desktop_entry.py", path: path.join(root, "desktop_entry.py") },
-    { label: "后端应用 app/", path: path.join(root, "app") },
-  ];
-
   if (app.isPackaged) {
-    checks.push({ label: "前端页面 web/index.html", path: path.join(process.resourcesPath, "web", "index.html") });
-  }
-
-  for (const check of checks) {
-    if (!fs.existsSync(check.path)) {
-      missing.push(`${check.label} (${check.path})`);
+    const checks = [
+      { label: "后端二进制", path: path.join(root, "bilibili-douyin-backend") },
+      { label: "前端页面 web/index.html", path: path.join(process.resourcesPath, "web", "index.html") },
+    ];
+    for (const check of checks) {
+      if (!fs.existsSync(check.path)) {
+        missing.push(`${check.label} (${check.path})`);
+      }
+    }
+  } else {
+    const checks = [
+      { label: "Python 可执行文件", path: resolvePythonExecutable() },
+      { label: "入口文件 desktop_entry.py", path: path.join(root, "desktop_entry.py") },
+      { label: "后端应用 app/", path: path.join(root, "app") },
+    ];
+    for (const check of checks) {
+      if (!fs.existsSync(check.path)) {
+        missing.push(`${check.label} (${check.path})`);
+      }
     }
   }
 
@@ -216,17 +223,27 @@ async function startBackend(currentSettings) {
     return;
   }
 
-  const entryFile = path.join(root, "desktop_entry.py");
   const stdoutLog = fs.openSync(path.join(logsDir, "desktop-backend.stdout.log"), "a");
   const stderrLog = fs.openSync(path.join(logsDir, "desktop-backend.stderr.log"), "a");
-  const pythonBin = resolvePythonExecutable();
 
-  backendProcess = spawn(pythonBin, [entryFile], {
-    cwd: root,
-    env: backendEnv(currentSettings),
-    stdio: ["ignore", stdoutLog, stderrLog],
-    windowsHide: true,
-  });
+  if (app.isPackaged) {
+    const backendBin = path.join(root, "bilibili-douyin-backend");
+    backendProcess = spawn(backendBin, [], {
+      cwd: root,
+      env: backendEnv(currentSettings),
+      stdio: ["ignore", stdoutLog, stderrLog],
+      windowsHide: true,
+    });
+  } else {
+    const entryFile = path.join(root, "desktop_entry.py");
+    const pythonBin = resolvePythonExecutable();
+    backendProcess = spawn(pythonBin, [entryFile], {
+      cwd: root,
+      env: backendEnv(currentSettings),
+      stdio: ["ignore", stdoutLog, stderrLog],
+      windowsHide: true,
+    });
+  }
 
   backendProcess.once("exit", (code, signal) => {
     backendHealthy = false;
