@@ -17,3 +17,4 @@ backend/.venv
 .venv
 .playwright-mcp
 backend/playwright-browsers
+desktop/build-resources/backend/bilibili-douyin-backend*

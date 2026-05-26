@@ -35,6 +35,7 @@ jobs:
 
       - name: Build backend binary
         run: |
+          Remove-Item -Force bilibili-douyin-backend.spec -ErrorAction SilentlyContinue
           .venv\Scripts\pyinstaller --onefile `
             --name bilibili-douyin-backend `
             --add-data "scripts;scripts" `
@@ -76,6 +77,13 @@ jobs:
             echo "Backend binary built successfully"
           }
         working-directory: backend
+
+      - name: Prepare backend binary for packaging
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path desktop\build-resources\backend
+          Copy-Item backend\dist\bilibili-douyin-backend.exe desktop\build-resources\backend\
+          echo "Copied backend binary to desktop\build-resources\backend\"
 
       - name: Download Windows ffmpeg
         run: |

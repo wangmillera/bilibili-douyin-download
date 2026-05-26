@@ -59,4 +59,7 @@ pyinstaller --onefile \
 
 chmod +x dist/bilibili-douyin-backend
 
+mkdir -p ../desktop/build-resources/backend
+cp dist/bilibili-douyin-backend ../desktop/build-resources/backend/
+
 echo "==> Build complete: $SCRIPT_DIR/dist/bilibili-douyin-backend"
