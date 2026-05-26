@@ -157,6 +157,32 @@ export function DownloaderConsole() {
     };
   }, []);
 
+  const backendLoading = runningInDesktop && !runtime.backendHealthy && !runtime.backendLaunchError;
+
+  useEffect(() => {
+    if (!backendLoading) return;
+
+    let active = true;
+    const timer = window.setInterval(async () => {
+      if (!active) return;
+      const nextRuntime = await getDesktopRuntimeStatus();
+      if (!active) return;
+      setRuntime(nextRuntime);
+      if (nextRuntime.backendHealthy || nextRuntime.backendLaunchError) {
+        if (nextRuntime.backendHealthy) {
+          setRuntime(nextRuntime);
+          setDesktopSettings(await getDesktopSettings());
+          setDiagnostics(await getDesktopDiagnostics());
+        }
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [backendLoading]);
+
   async function refreshRecentTasks(limit = 200) {
     try {
       if (hasDesktopBridge()) {
@@ -192,18 +218,22 @@ export function DownloaderConsole() {
     return () => window.clearInterval(timer);
   }, [runtime.backendOrigin]);
 
+  const didInitialSelect = useRef(false);
+  useEffect(() => {
+    if (didInitialSelect.current || recentTasks.length === 0) return;
+    didInitialSelect.current = true;
+    const latestTask = recentTasks[0];
+    setSelectedTaskId(latestTask.task_id);
+    setTask(latestTask);
+  }, [recentTasks]);
+
   useEffect(() => {
     if (recentTasks.length === 0) {
       setTaskPage(1);
       return;
     }
 
-    if (!selectedTaskId) {
-      const latestTask = recentTasks[0];
-      setSelectedTaskId(latestTask.task_id);
-      setTask(latestTask);
-      return;
-    }
+    if (!selectedTaskId || recentTasks.length === 0) return;
 
     const matchingTask = recentTasks.find((item) => item.task_id === selectedTaskId);
     if (matchingTask) {
@@ -537,7 +567,15 @@ export function DownloaderConsole() {
 
   return (
     <main className="desktop-shell">
-      {runningInDesktop && !runtime.backendHealthy && runtime.backendLaunchError ? (
+      {backendLoading ? (
+        <section className="backend-loading-panel">
+          <div className="backend-loading-content">
+            <div className="loading-spinner" />
+            <h2>正在启动本地服务</h2>
+            <p className="backend-loading-hint">后端服务启动中，请稍候...</p>
+          </div>
+        </section>
+      ) : runningInDesktop && !runtime.backendHealthy && runtime.backendLaunchError ? (
         <section className="backend-error-panel">
           <div className="backend-error-content">
             <h2>本地服务启动失败</h2>

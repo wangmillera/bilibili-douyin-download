@@ -183,31 +183,55 @@ npm run dev:full
 
 ### 桌面版构建
 
-先导出桌面前端静态资源：
+构建顺序：**前端静态导出必须先于 electron-builder 打包**（`web/out/` 作为 extraResources 打入 app）。
 
 ```bash
-cd desktop
-npm run build:renderer
+cd web
+npm run build:desktop        # Next.js 静态导出 → web/out/
+
+cd ../desktop
+npm run dist:mac             # 构建后端二进制 + electron-builder → DMG
 ```
 
-再按目标平台打包：
+`dist:mac` 内部执行：
+1. `build_backend.sh` — PyInstaller 将 FastAPI 后端打包为单文件二进制 `bilibili-douyin-backend`（约 75MB）
+2. `electron-builder --mac dmg` — 将 Electron 壳 + 前端静态资源 + 后端二进制 + douyin-downloader 打包为 DMG
+
+打包产物在 `desktop/dist/B站抖音下载器-0.1.0-arm64.dmg`。
+
+**Windows 打包**：
 
 ```bash
 cd desktop
-npm run dist:mac
 npm run dist:win
 ```
 
+### 打包注意事项
+
+**PyInstaller 隐藏导入**：`gmssl` 的子模块（`gmssl.func`、`gmssl.sm3`、`gmssl.sm2`、`gmssl.sm4`）不会被自动检测，漏掉任何一个会导致抖音 ABogus 签名在打包后静默失败（import 被 try/except 吞掉），表现为 `Empty 200 response (anti-bot)` 错误。必须在 `build_backend.sh` 和 `.spec` 文件中都显式声明。
+
+**打包 vs 开发模式**：`desktop/main.cjs` 通过 `app.isPackaged` 区分行为：
+- 开发模式：检查 `python3`、`desktop_entry.py`、`app/` 是否存在；使用 `python3 desktop_entry.py` 启动后端
+- 打包模式：检查 `bilibili-douyin-backend` 二进制和 `web/index.html` 是否存在；直接 spawn 二进制
+
+**启动超时**：PyInstaller 单文件二进制首次启动时会自解压到临时目录，可能耗时较久。打包模式下 `waitForBackend()` 超时为 60 秒（开发模式 20 秒）。如果超时后进程仍在运行，后续重启调用不会杀掉正在启动的进程，避免竞态循环。
+
+**`douyin_adapter.py` 冻结模式**：通过 `getattr(sys, 'frozen', False)` 检测是否在 PyInstaller 环境中运行。冻结模式下使用 `sys.executable --helper` 调用子进程，而非 `python3 scripts/helper.py`。
+
+**VSCode 终端问题**：VSCode 集成终端可能设置 `ELECTRON_RUN_AS_NODE=1`，导致 Electron 无法正常启动（报错 `Cannot read properties of undefined (reading 'handle')`）。开发时需先 `unset ELECTRON_RUN_AS_NODE` 或从外部终端启动。
+
+**entitlements**：macOS 打包需要 `desktop/entitlements.mac.plist`，启用 `com.apple.security.cs.allow-unsigned-executable-memory` 等权限，否则 PyInstaller 二进制可能被 Hardened Runtime 阻止。
+
+**douyin-downloader 目录**：打包时 `vendor/douyin-downloader/` 作为 extraResources 打入 app，排除 `.git/`、`.venv/`、`__pycache__/`、`*.pyc`。桌面版通过 `DOUYIN_DOWNLOADER_DIR` 环境变量指向该目录。
+
 ### 桌面版运行约定
 
-- 桌面版固定使用 `QUEUE_MODE=inline`
-- YouTube 默认下载器固定为 `yt-dlp`
-- 首次启动会要求选择下载目录
-- 桌面版通过 Electron IPC 提供：
-  - 下载目录选择
-  - 打开下载目录
-  - 打开任务文件
-  - 最近任务列表
+- 桌面版固定使用 `QUEUE_MODE=inline`，后端运行在 `127.0.0.1:18180`
+- 窗口先展示 loading 页面，后端就绪后自动切换到主界面；若启动失败显示错误面板并可重试
+- 首次启动弹出目录选择对话框；后续启动直接使用已选目录
+- YouTube / 抖音 Cookie 优先从本机 Chrome 浏览器读取，配置文件存储在 `userData` 目录
+- 通过 Electron IPC 提供：下载目录选择、打开下载目录/日志目录、打开任务文件、导出诊断日志
+- 用户设置在 `~/Library/Application Support/bilibili-douyin-downloader-desktop/desktop-settings.json`
 
 ## 环境变量
 

@@ -190,7 +190,11 @@ function delay(ms) {
 }
 
 async function waitForBackend() {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  const maxAttempts = app.isPackaged ? 120 : 40;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (backendProcessExited) {
+      return false;
+    }
     try {
       const response = await fetch(`${DESKTOP_BACKEND_ORIGIN}/health`);
       if (response.ok) {
@@ -208,6 +212,11 @@ async function waitForBackend() {
 }
 
 async function startBackend(currentSettings) {
+  if (backendProcess && !backendProcessExited && !backendHealthy) {
+    const started = await waitForBackend();
+    if (started) return;
+  }
+
   await stopBackend();
 
   backendLaunchError = null;
@@ -266,7 +275,7 @@ async function startBackend(currentSettings) {
     if (backendProcessExited) {
       backendLaunchError = "后端启动后立即退出，请检查日志";
     } else {
-      backendLaunchError = `后端在 20 秒内未响应（端口 ${DESKTOP_BACKEND_PORT}）`;
+      backendLaunchError = `后端在 ${app.isPackaged ? 60 : 20} 秒内未响应（端口 ${DESKTOP_BACKEND_PORT}）`;
     }
   }
 }
@@ -485,9 +494,10 @@ ipcMain.handle("desktop:restart-backend", async () => {
 });
 
 app.whenReady().then(async () => {
+  createWindow();
+
   const preparedSettings = await ensureDownloadDirectory(loadSettings());
   await startBackend(preparedSettings);
-  createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
