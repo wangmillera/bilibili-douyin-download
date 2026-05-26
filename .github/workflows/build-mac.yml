@@ -103,21 +103,9 @@ jobs:
         run: npm ci
         working-directory: desktop
 
-      - name: Build Electron DMG (unsigned)
-        if: ${{ secrets.MAC_CERT_BASE64 == '' }}
-        run: npx electron-builder --mac dmg
+      - name: Build Electron DMG
+        run: npx electron-builder --mac dmg --publish never
         working-directory: desktop
-
-      - name: Build Electron DMG (signed)
-        if: ${{ secrets.MAC_CERT_BASE64 != '' }}
-        run: npx electron-builder --mac dmg
-        working-directory: desktop
-        env:
-          CSC_LINK: ${{ secrets.MAC_CERT_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
