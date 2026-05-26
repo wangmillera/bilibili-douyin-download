@@ -1,0 +1,121 @@
+name: Build macOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+        working-directory: backend
+
+      - name: Build backend binary
+        run: |
+          source .venv/bin/activate
+          rm -f bilibili-douyin-backend.spec
+          pyinstaller --onefile \
+            --name bilibili-douyin-backend \
+            --add-data "scripts:scripts" \
+            --hidden-import=uvicorn \
+            --hidden-import=uvicorn.logging \
+            --hidden-import=uvicorn.loops \
+            --hidden-import=uvicorn.loops.auto \
+            --hidden-import=uvicorn.protocols \
+            --hidden-import=uvicorn.protocols.http \
+            --hidden-import=uvicorn.protocols.http.auto \
+            --hidden-import=uvicorn.protocols.websockets \
+            --hidden-import=uvicorn.protocols.websockets.auto \
+            --hidden-import=uvicorn.lifespan \
+            --hidden-import=uvicorn.lifespan.on \
+            --hidden-import=yt_dlp \
+            --hidden-import=yt_dlp.utils \
+            --hidden-import=yt_dlp.extractor \
+            --hidden-import=aiohttp \
+            --hidden-import=aiofiles \
+            --hidden-import=aiosqlite \
+            --hidden-import=gmssl \
+            --hidden-import=gmssl.func \
+            --hidden-import=gmssl.sm3 \
+            --hidden-import=gmssl.sm2 \
+            --hidden-import=gmssl.sm4 \
+            --hidden-import=pydantic \
+            --hidden-import=fastapi \
+            --hidden-import=redis \
+            --hidden-import=rq \
+            --hidden-import=requests \
+            --hidden-import=opencc \
+            --hidden-import=browser_cookie3 \
+            --hidden-import=faster_whisper \
+            --collect-data faster_whisper \
+            --noupx \
+            --noconfirm \
+            run_backend.py
+          chmod +x dist/bilibili-douyin-backend
+          ls -lh dist/bilibili-douyin-backend
+        working-directory: backend
+
+      - name: Prepare backend binary for packaging
+        run: |
+          mkdir -p desktop/build-resources/backend
+          cp backend/dist/bilibili-douyin-backend desktop/build-resources/backend/
+          echo "Copied backend binary to desktop/build-resources/backend/"
+
+      - name: Verify bundled ffmpeg
+        run: |
+          chmod +x bin/ffmpeg bin/ffprobe
+          file bin/ffmpeg bin/ffprobe
+          ls -lh bin/
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build frontend
+        run: npm run build:desktop
+        working-directory: web
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: desktop
+
+      - name: Build Electron DMG
+        run: npx electron-builder --mac dmg
+        working-directory: desktop
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: B站抖音下载器-macOS
+          path: desktop/dist/*.dmg
+          if-no-files-found: error
