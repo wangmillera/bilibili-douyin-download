@@ -103,6 +103,17 @@ jobs:
         run: npm ci
         working-directory: desktop
 
+      - name: Verify extraResources paths
+        run: |
+          echo "=== Checking extraResources ==="
+          for d in bin vendor/douyin-downloader web/out desktop/build-resources/backend; do
+            if [ -d "$d" ]; then
+              echo "OK: $d ($(find "$d" -type f | wc -l | tr -d ' ') files)"
+            else
+              echo "MISSING: $d"
+            fi
+          done
+
       - name: Build Electron DMG
         run: npx electron-builder --mac dmg --publish never
         working-directory: desktop
