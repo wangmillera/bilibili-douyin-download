@@ -107,6 +107,7 @@ def base_opts(url: str, cookies: str | None = None, task_dir: Path | None = None
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "ffmpeg_location": settings.ffmpeg_bin,
     }
     cookie_header = resolve_cookie_header(url, cookies)
     cookie_file = resolve_cookie_file(url, task_dir, cookies)
