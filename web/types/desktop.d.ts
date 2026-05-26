@@ -10,6 +10,11 @@ export type DesktopRuntimeStatus = {
   isDesktop: boolean;
   backendOrigin: string;
   backendHealthy: boolean;
+  backendLaunchError: string | null;
+  backendProcessExited: boolean;
+  backendPort: number;
+  logDir: string;
+  missingResources: string[];
   platform: string;
 };
 
@@ -40,6 +45,8 @@ declare global {
       getRuntimeStatus: () => Promise<DesktopRuntimeStatus>;
       listRecentTasks: (limit?: number) => Promise<unknown[]>;
       getDiagnostics: () => Promise<DesktopDiagnostics | null>;
+      restartBackend: () => Promise<boolean>;
+      exportLogs: () => Promise<{ content: string; filename: string }>;
     };
   }
 }

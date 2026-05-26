@@ -13,7 +13,9 @@ import {
   openDownloadDirectory,
   openLogsDirectory,
   openTaskFile,
+  restartDesktopBackend,
   updateDesktopSettings,
+  exportDesktopLogs,
 } from "../lib/desktop";
 import type { DesktopDiagnostics, DesktopRuntimeStatus, DesktopSettings } from "../types/desktop";
 
@@ -96,7 +98,12 @@ export function DownloaderConsole() {
   const [subtitle, setSubtitle] = useState<SubtitleResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToastMessage(message);
+    window.setTimeout(() => setToastMessage(null), 2000);
+  }
   const [runtime, setRuntime] = useState<DesktopRuntimeStatus>(fallbackDesktopRuntime);
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(fallbackDesktopSettings);
   const [diagnostics, setDiagnostics] = useState<DesktopDiagnostics | null>(null);
@@ -171,7 +178,7 @@ export function DownloaderConsole() {
     setSelectedTaskId(nextTask.task_id);
     setTask(nextTask);
     setSubtitle(null);
-    setCopied(false);
+    setToastMessage(null);
     setPlayerOpen(false);
   }
 
@@ -309,7 +316,7 @@ export function DownloaderConsole() {
     setTask(null);
     setSelectedTaskId(null);
     setSubtitle(null);
-    setCopied(false);
+    setToastMessage(null);
     setPlayerOpen(false);
 
     try {
@@ -362,8 +369,7 @@ export function DownloaderConsole() {
       return;
     }
     await navigator.clipboard.writeText(subtitle.content);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    showToast("字幕已复制");
   }
 
   function isDouyinCookieError(message: string | null | undefined): boolean {
@@ -389,7 +395,7 @@ export function DownloaderConsole() {
       setDouyinLoginActive(true);
       setError(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "抖音登录启动失败");
+      setError(reason instanceof Error ? reason.message : "浏览器启动失败");
     } finally {
       setDouyinLoginLoading(false);
     }
@@ -460,7 +466,7 @@ export function DownloaderConsole() {
         setSelectedTaskId(null);
         setTask(null);
         setSubtitle(null);
-        setCopied(false);
+        setToastMessage(null);
         setPlayerOpen(false);
       }
       await refreshRecentTasks();
@@ -529,6 +535,34 @@ export function DownloaderConsole() {
 
   return (
     <main className="desktop-shell">
+      {runningInDesktop && !runtime.backendHealthy && runtime.backendLaunchError ? (
+        <section className="backend-error-panel">
+          <div className="backend-error-content">
+            <h2>本地服务启动失败</h2>
+            <p className="backend-error-message">{runtime.backendLaunchError}</p>
+            {runtime.missingResources.length > 0 ? (
+              <ul className="backend-error-list">
+                {runtime.missingResources.map((res, i) => (
+                  <li key={i}>{res}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="backend-error-actions">
+              <button className="tool-button ghost" type="button" onClick={async () => {
+                await restartDesktopBackend();
+                setRuntime(await getDesktopRuntimeStatus());
+              }}>
+                重新启动
+              </button>
+              {runtime.logDir ? (
+                <button className="tool-button ghost" type="button" onClick={() => openLogsDirectory()}>
+                  打开日志目录
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
       {settingsOpen ? (
         <div className="settings-modal-shell" aria-hidden={false} onClick={() => setSettingsOpen(false)}>
           <div
@@ -596,27 +630,27 @@ export function DownloaderConsole() {
 
             <div className="diagnostics-panel">
               <div className="diagnostics-row">
-                <span>抖音 Cookies</span>
+                <span>抖音 Cookie 数量</span>
                 <strong>{diagnostics ? diagnostics.douyin_cookie_count : "--"}</strong>
               </div>
               <div className="diagnostics-row">
-                <span>命中 Profile</span>
+                <span>浏览器配置</span>
                 <strong>{diagnostics?.selected_profile || desktopSettings.preferredBrowserProfile}</strong>
               </div>
               <div className="diagnostics-row">
-                <span>读取方式</span>
-                <strong>{diagnostics?.cookie_read_method || "未命中"}</strong>
+                <span>Cookie 来源</span>
+                <strong>{diagnostics?.cookie_read_method || "未检测到"}</strong>
               </div>
               <div className="diagnostics-row">
-                <span>Helper</span>
+                <span>抖音下载工具</span>
                 <strong>
-                  {diagnostics?.douyin_helper_repo_exists && diagnostics?.douyin_helper_python_exists ? "已内置" : "缺失"}
+                  {diagnostics?.douyin_helper_repo_exists && diagnostics?.douyin_helper_python_exists ? "已就绪" : "未安装"}
                 </strong>
               </div>
               <div className="diagnostics-row">
                 <span>FFmpeg</span>
                 <strong>
-                  {diagnostics?.ffmpeg_exists && diagnostics?.ffprobe_exists ? "已就绪" : "缺失"}
+                  {diagnostics?.ffmpeg_exists && diagnostics?.ffprobe_exists ? "已就绪" : "未安装"}
                 </strong>
               </div>
               {diagnostics?.cookie_read_error ? <p className="diagnostics-error">{diagnostics.cookie_read_error}</p> : null}
@@ -654,7 +688,7 @@ export function DownloaderConsole() {
             </div>
             {douyinLoginActive ? (
               <p className="panel-copy" style={{ padding: "0 12px 12px", color: "var(--info-color)" }}>
-                已在独立浏览器中打开抖音登录页面。请扫码或使用手机号登录，完成后点击「已完成登录」按钮保存 Cookie。
+                已在你的默认浏览器中打开抖音。登录后回到本页面，点击「已完成登录」按钮导入 Cookie。
               </p>
             ) : null}
             {douyinCookieCount !== null ? (
@@ -671,6 +705,20 @@ export function DownloaderConsole() {
                   </button>
                   <button className="tool-button ghost" type="button" onClick={openLogsDirectory}>
                     打开日志
+                  </button>
+                  <button className="tool-button ghost" type="button" onClick={async () => {
+                    const result = await exportDesktopLogs();
+                    if (!result) return;
+                    const blob = new Blob([result.content], { type: "text/plain;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = result.filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast("日志已导出");
+                  }}>
+                    导出日志
                   </button>
                 </>
               ) : (
@@ -762,6 +810,59 @@ export function DownloaderConsole() {
                 <button className="tool-button primary wide" type="submit" disabled={submitting || !url.trim() || (!!task && !isTerminalState)}>
                   {submitting ? "任务提交中..." : !url.trim() ? "请输入链接" : !!task && !isTerminalState ? "正在处理中..." : "开始处理"}
                 </button>
+                {task && !isTerminalState ? (
+                  <button
+                    className="tool-button ghost wide"
+                    type="button"
+                    onClick={() => cancelTask(task.task_id).catch(() => undefined)}
+                  >
+                    终止任务
+                  </button>
+                ) : null}
+                {task?.status === "failed" ? (
+                  <button
+                    className="tool-button ghost wide"
+                    type="button"
+                    onClick={async () => {
+                      const retryUrl = task.source_url;
+                      setUrl(retryUrl);
+                      setSubmitting(true);
+                      setError(null);
+                      setTask(null);
+                      setSelectedTaskId(null);
+                      setSubtitle(null);
+                      setToastMessage(null);
+                      setPlayerOpen(false);
+                      try {
+                        const response = await fetch(apiUrl("/api/tasks?allow_duplicate=true"), {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ url: retryUrl }),
+                        });
+                        if (!response.ok) {
+                          const payload = await response.json().catch(() => ({ detail: "重试失败" }));
+                          throw new Error(payload.detail || "重试失败");
+                        }
+                        const payload: { task_id: string } = await response.json();
+                        const taskResponse = await fetch(apiUrl(`/api/tasks/${payload.task_id}`), { cache: "no-store" });
+                        if (!taskResponse.ok) {
+                          throw new Error("任务创建成功，但状态读取失败");
+                        }
+                        const nextTask: TaskRecord = await taskResponse.json();
+                        setSelectedTaskId(nextTask.task_id);
+                        setTask(nextTask);
+                        refreshRecentTasks().catch(() => undefined);
+                      } catch (reason) {
+                        setError(reason instanceof Error ? reason.message : "重试失败");
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }}
+                    disabled={submitting}
+                  >
+                    重试任务
+                  </button>
+                ) : null}
               </div>
             </form>
           </article>
@@ -793,17 +894,6 @@ export function DownloaderConsole() {
                 <dd>{formatDuration(task?.duration_seconds ?? null)}</dd>
               </div>
             </dl>
-            {task && !isTerminalState ? (
-              <div style={{ marginTop: 14 }}>
-                <button
-                  className="tool-button ghost"
-                  type="button"
-                  onClick={() => cancelTask(task.task_id).catch(() => undefined)}
-                >
-                  终止任务
-                </button>
-              </div>
-            ) : null}
             {error ? (
               <div className="inline-banner error">
                 <strong>错误</strong>
@@ -829,7 +919,7 @@ export function DownloaderConsole() {
                 )}
                 {douyinLoginActive ? (
                   <p style={{ marginTop: 6, color: "var(--info-color)", fontSize: "0.85rem" }}>
-                    请在打开的独立浏览器窗口中登录抖音（扫码或手机号），然后点击上方按钮保存 Cookie。
+                    请在打开的浏览器中登录抖音，然后点击上方按钮导入 Cookie。
                   </p>
                 ) : null}
                 {douyinCookieCount !== null ? (
@@ -887,7 +977,7 @@ export function DownloaderConsole() {
                   ) : null}
                   {subtitle?.content ? (
                     <button className="tool-button ghost" type="button" onClick={copySubtitle}>
-                      {copied ? "已复制字幕" : "复制字幕"}
+                      复制字幕
                     </button>
                   ) : null}
                 </div>
@@ -1019,7 +1109,7 @@ export function DownloaderConsole() {
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            navigator.clipboard.writeText(item.source_url).catch(() => undefined);
+                            navigator.clipboard.writeText(item.source_url).then(() => showToast("链接已复制")).catch(() => undefined);
                           }}
                         >
                           复制链接
@@ -1085,6 +1175,7 @@ export function DownloaderConsole() {
           </article>
         </section>
       </section>
+      {toastMessage ? <div className="toast" role="status">{toastMessage}</div> : null}
     </main>
   );
 }

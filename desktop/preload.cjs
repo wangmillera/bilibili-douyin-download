@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getRuntimeStatus: () => ipcRenderer.invoke("desktop:get-runtime-status"),
   listRecentTasks: (limit) => ipcRenderer.invoke("desktop:list-recent-tasks", limit),
   getDiagnostics: () => ipcRenderer.invoke("desktop:get-diagnostics"),
+  restartBackend: () => ipcRenderer.invoke("desktop:restart-backend"),
+  exportLogs: () => ipcRenderer.invoke("desktop:export-logs"),
 });

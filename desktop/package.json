@@ -7,7 +7,7 @@
     "dev": "electron .",
     "dev:full": "concurrently -k \"npm --prefix ../web run dev\" \"wait-on tcp:3000 && electron .\"",
     "build:renderer": "npm --prefix ../web run build:desktop",
-    "build:backend": "bash ../scripts/install-playwright-browsers.sh",
+    "build:backend": "bash ../scripts/make-venv-relocatable.sh",
     "pack": "npm run build:renderer && npm run build:backend && electron-builder --dir",
     "dist:mac": "npm run build:renderer && npm run build:backend && electron-builder --mac dmg",
     "dist:win": "npm run build:renderer && npm run build:backend && electron-builder --win nsis"
@@ -65,10 +65,6 @@
       {
         "from": "../backend/.venv",
         "to": "backend/.venv"
-      },
-      {
-        "from": "../backend/playwright-browsers",
-        "to": "backend/playwright-browsers"
       }
     ],
     "mac": {

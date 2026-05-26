@@ -12,6 +12,8 @@ const DEFAULT_RECENT_TASKS_LIMIT = 8;
 let mainWindow = null;
 let backendProcess = null;
 let backendHealthy = false;
+let backendLaunchError = null;
+let backendProcessExited = false;
 
 function settingsPath() {
   return path.join(app.getPath("userData"), "desktop-settings.json");
@@ -109,15 +111,10 @@ function resolveFfprobeBinary() {
 
 function resolvePythonExecutable() {
   const root = backendRoot();
-  const candidates = app.isPackaged
-    ? [
-        path.join(root, ".venv", "Scripts", "python.exe"),
-        path.join(root, ".venv", "bin", "python"),
-      ]
-    : [
-        path.join(root, ".venv", "Scripts", "python.exe"),
-        path.join(root, ".venv", "bin", "python"),
-      ];
+  const candidates = [
+    path.join(root, ".venv", "Scripts", "python.exe"),
+    path.join(root, ".venv", "bin", "python"),
+  ];
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
@@ -126,6 +123,26 @@ function resolvePythonExecutable() {
   }
 
   return process.platform === "win32" ? "python" : "python3";
+}
+
+function checkCriticalResources() {
+  const root = backendRoot();
+  const missing = [];
+
+  const checks = [
+    { label: "Python 可执行文件", path: resolvePythonExecutable() },
+    { label: "入口文件 desktop_entry.py", path: path.join(root, "desktop_entry.py") },
+    { label: "后端应用 app/", path: path.join(root, "app") },
+    { label: "前端页面 web/index.html", path: path.join(process.resourcesPath, "web", "index.html") },
+  ];
+
+  for (const check of checks) {
+    if (!fs.existsSync(check.path)) {
+      missing.push(`${check.label} (${check.path})`);
+    }
+  }
+
+  return missing;
 }
 
 function backendEnv(currentSettings) {
@@ -152,7 +169,6 @@ function backendEnv(currentSettings) {
     YOUTUBE_COOKIE_FILE: path.join(userDataPath, "youtube.cookies.txt"),
     YOUTUBE_COOKIES_BROWSER: currentSettings.preferredBrowser || "chrome",
     YOUTUBE_COOKIES_PROFILE: currentSettings.preferredBrowserProfile || "auto",
-	PLAYWRIGHT_BROWSERS_PATH: path.join(backendRoot(), "playwright-browsers"),
     YOUTUBE_DOWNLOADER: "yt-dlp",
     FFMPEG_BIN: ffmpegBin,
     FFPROBE_BIN: ffprobeBin,
@@ -169,6 +185,7 @@ async function waitForBackend() {
       const response = await fetch(`${DESKTOP_BACKEND_ORIGIN}/health`);
       if (response.ok) {
         backendHealthy = true;
+        backendLaunchError = null;
         return true;
       }
     } catch {
@@ -183,24 +200,55 @@ async function waitForBackend() {
 async function startBackend(currentSettings) {
   await stopBackend();
 
-  const entryFile = path.join(backendRoot(), "desktop_entry.py");
+  backendLaunchError = null;
+  backendProcessExited = false;
+
+  const root = backendRoot();
   const logsDir = path.join(app.getPath("userData"), "logs");
   fs.mkdirSync(logsDir, { recursive: true });
+
+  const missing = checkCriticalResources();
+  if (missing.length > 0) {
+    backendLaunchError = `启动失败，缺少关键资源：\n${missing.join("\n")}`;
+    return;
+  }
+
+  const entryFile = path.join(root, "desktop_entry.py");
   const stdoutLog = fs.openSync(path.join(logsDir, "desktop-backend.stdout.log"), "a");
   const stderrLog = fs.openSync(path.join(logsDir, "desktop-backend.stderr.log"), "a");
-  backendProcess = spawn(resolvePythonExecutable(), [entryFile], {
-    cwd: backendRoot(),
+  const pythonBin = resolvePythonExecutable();
+
+  backendProcess = spawn(pythonBin, [entryFile], {
+    cwd: root,
     env: backendEnv(currentSettings),
     stdio: ["ignore", stdoutLog, stderrLog],
     windowsHide: true,
   });
 
-  backendProcess.once("exit", () => {
+  backendProcess.once("exit", (code, signal) => {
     backendHealthy = false;
+    backendProcessExited = true;
     backendProcess = null;
+    if (code !== 0 && code !== null) {
+      backendLaunchError = `Python 进程异常退出 (code=${code})`;
+    }
   });
 
-  await waitForBackend();
+  backendProcess.once("error", (err) => {
+    backendHealthy = false;
+    backendProcessExited = true;
+    backendProcess = null;
+    backendLaunchError = `Python 进程启动失败：${err.message}`;
+  });
+
+  const started = await waitForBackend();
+  if (!started && !backendLaunchError) {
+    if (backendProcessExited) {
+      backendLaunchError = "后端启动后立即退出，请检查日志";
+    } else {
+      backendLaunchError = `后端在 20 秒内未响应（端口 ${DESKTOP_BACKEND_PORT}）`;
+    }
+  }
 }
 
 async function stopBackend() {
@@ -241,7 +289,11 @@ function safeReadTaskMeta(taskId) {
   if (!fs.existsSync(taskMetaPath)) {
     return null;
   }
-  return JSON.parse(fs.readFileSync(taskMetaPath, "utf8"));
+  try {
+    return JSON.parse(fs.readFileSync(taskMetaPath, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 async function restartBackendIfNeeded(changes) {
@@ -288,6 +340,69 @@ ipcMain.handle("desktop:open-logs-directory", async () => {
   return shell.openPath(logsDir);
 });
 
+ipcMain.handle("desktop:export-logs", async () => {
+  const logsDir = path.join(app.getPath("userData"), "logs");
+  const lines = [];
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+
+  lines.push("=== B站抖音下载器 诊断日志 ===");
+  lines.push(`导出时间: ${new Date().toLocaleString()}`);
+  lines.push(`平台: ${process.platform} ${process.arch}`);
+  lines.push(`Electron: ${process.versions.electron}`);
+  lines.push(`后端端口: ${DESKTOP_BACKEND_PORT}`);
+  lines.push(`后端健康: ${backendHealthy}`);
+  lines.push(`启动错误: ${backendLaunchError || "无"}`);
+  lines.push(`进程已退出: ${backendProcessExited}`);
+  lines.push("");
+
+  const missing = checkCriticalResources();
+  if (missing.length > 0) {
+    lines.push("=== 缺失资源 ===");
+    for (const res of missing) {
+      lines.push(`  - ${res}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("=== 环境信息 ===");
+  const env = backendEnv(loadSettings());
+  lines.push(`FFMPEG_BIN: ${env.FFMPEG_BIN}`);
+  lines.push(`FFPROBE_BIN: ${env.FFPROBE_BIN}`);
+  lines.push(`TASKS_DIR: ${env.TASKS_DIR}`);
+  lines.push(`APP_ENV: ${env.APP_ENV}`);
+  lines.push(`QUEUE_MODE: ${env.QUEUE_MODE}`);
+  lines.push("");
+
+  const stdoutPath = path.join(logsDir, "desktop-backend.stdout.log");
+  const stderrPath = path.join(logsDir, "desktop-backend.stderr.log");
+
+  if (fs.existsSync(stderrPath)) {
+    lines.push("=== 后端错误日志 (stderr, 最近 200 行) ===");
+    try {
+      const content = fs.readFileSync(stderrPath, "utf8");
+      const tail = content.trim().split("\n").slice(-200).join("\n");
+      lines.push(tail || "(空)");
+    } catch {
+      lines.push("(读取失败)");
+    }
+    lines.push("");
+  }
+
+  if (fs.existsSync(stdoutPath)) {
+    lines.push("=== 后端输出日志 (stdout, 最近 100 行) ===");
+    try {
+      const content = fs.readFileSync(stdoutPath, "utf8");
+      const tail = content.trim().split("\n").slice(-100).join("\n");
+      lines.push(tail || "(空)");
+    } catch {
+      lines.push("(读取失败)");
+    }
+    lines.push("");
+  }
+
+  return { content: lines.join("\n"), filename: `downloader-log-${timestamp}.txt` };
+});
+
 ipcMain.handle("desktop:open-task-file", async (_event, payload) => {
   const task = safeReadTaskMeta(payload.taskId);
   if (!task) {
@@ -312,6 +427,11 @@ ipcMain.handle("desktop:get-runtime-status", async () => ({
   isDesktop: true,
   backendOrigin: DESKTOP_BACKEND_ORIGIN,
   backendHealthy,
+  backendLaunchError,
+  backendProcessExited,
+  backendPort: DESKTOP_BACKEND_PORT,
+  logDir: path.join(app.getPath("userData"), "logs"),
+  missingResources: checkCriticalResources(),
   platform: process.platform,
 }));
 
@@ -337,6 +457,11 @@ ipcMain.handle("desktop:get-diagnostics", async () => {
   } catch {
     return null;
   }
+});
+
+ipcMain.handle("desktop:restart-backend", async () => {
+  await startBackend(loadSettings());
+  return backendHealthy;
 });
 
 app.whenReady().then(async () => {

@@ -12,6 +12,11 @@ export const fallbackDesktopRuntime: DesktopRuntimeStatus = {
   isDesktop: false,
   backendOrigin: "",
   backendHealthy: false,
+  backendLaunchError: null,
+  backendProcessExited: false,
+  backendPort: 0,
+  logDir: "",
+  missingResources: [],
   platform: "web",
 };
 
@@ -73,4 +78,18 @@ export async function getDesktopDiagnostics(): Promise<DesktopDiagnostics | null
     return null;
   }
   return window.desktopBridge!.getDiagnostics();
+}
+
+export async function restartDesktopBackend(): Promise<boolean> {
+  if (!hasDesktopBridge()) {
+    return false;
+  }
+  return window.desktopBridge!.restartBackend();
+}
+
+export async function exportDesktopLogs(): Promise<{ content: string; filename: string } | null> {
+  if (!hasDesktopBridge()) {
+    return null;
+  }
+  return window.desktopBridge!.exportLogs();
 }

@@ -873,3 +873,71 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 10px 24px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: toast-in 0.25s ease-out;
+  pointer-events: none;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.backend-error-panel {
+  margin-bottom: 18px;
+  padding: 24px;
+  border: 1px solid var(--error);
+  border-radius: var(--radius-lg);
+  background: var(--error-soft);
+}
+
+.backend-error-content h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--error);
+}
+
+.backend-error-message {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 14px;
+  white-space: pre-line;
+}
+
+.backend-error-list {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.backend-error-list li {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.backend-error-actions {
+  display: flex;
+  gap: 10px;
+}
