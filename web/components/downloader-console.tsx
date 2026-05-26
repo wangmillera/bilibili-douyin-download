@@ -116,6 +116,22 @@ export function DownloaderConsole() {
   const [douyinCookieCount, setDouyinCookieCount] = useState<number | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; resolve: (value: boolean) => void } | null>(null);
 
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    if (document.documentElement.classList.contains("dark")) return "dark";
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark" || stored === "light") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("theme", next);
+    document.documentElement.classList.remove("light", "dark");
+    document.documentElement.classList.add(next);
+  }
+
   function showConfirm(message: string): Promise<boolean> {
     return new Promise((resolve) => setConfirmDialog({ message, resolve }));
   }
@@ -567,6 +583,15 @@ export function DownloaderConsole() {
 
   return (
     <main className="desktop-shell">
+      <button
+        className="theme-toggle"
+        type="button"
+        onClick={toggleTheme}
+        aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+        title={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+      >
+        {theme === "dark" ? "☀️" : "🌙"}
+      </button>
       {backendLoading ? (
         <section className="backend-loading-panel">
           <div className="backend-loading-content">
